@@ -124,7 +124,7 @@
 //  
 // 
 //////////////////////////////////////////////////////////////////////////////////
-module cscgem_emulator(
+module CSC_GEM_Emulator(
     input 	      ck125n, ck125p,
     input 	      ck160n, ck160p,
     input 	      lhc_ckn, lhc_ckp,
