@@ -1,5 +1,5 @@
 def halfstrip_to_triad (hs):
-  if 0 <= hs <= 31: # ME1/1a - 64 strips (128 halfstrips) per 4 DCFEBs
+  if 0 <= hs <= 31: # ME1/1b - 64 strips (128 halfstrips) per 4 DCFEBs
     dcfeb = 0
     first_hs_in_dcfeb = 0
   elif 32 <= hs <= 63:
@@ -11,13 +11,13 @@ def halfstrip_to_triad (hs):
   elif 96 <= hs <= 127:
     dcfeb = 3
     first_hs_in_dcfeb = 96
-  elif 128 <= hs <= 159:
+  elif 128 <= hs <= 159:  # ME1/1a - 48 strips (96 halfstrips) per 3 DCFEBs
     dcfeb = 4
     first_hs_in_dcfeb = 128
   elif 160 <= hs <= 191:
     dcfeb = 5
     first_hs_in_dcfeb = 160
-  elif 192 <= hs <= 224:
+  elif 192 <= hs <= 223:
     dcfeb = 6
     first_hs_in_dcfeb = 192
   else:
