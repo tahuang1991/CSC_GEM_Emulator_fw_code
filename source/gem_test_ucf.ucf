@@ -170,12 +170,17 @@ TIMESPEC "TS_qpllck40" = PERIOD "qpllck40" 25 ns HIGH 50%;
 NET "lhc_ck" TNM_NET = "lhc_clock";  # this is from tmb_clock0
 TIMESPEC "TS_lhc_clock" = PERIOD "lhc_clock" 25 ns HIGH 50%;
 
+# location for snap fiber0 mgt: GTX3/?
+NET "txn[0]" LOC = AK2 | IOSTANDARD = "LVDS_25";
+NET "txp[0]" LOC = AK1 | IOSTANDARD = "LVDS_25";
+#NET "rxn[0]" LOC = AP6 | IOSTANDARD = "LVDS_25";
+#NET "rxp[0]" LOC = AP5 | IOSTANDARD = "LVDS_25";
 
 # location for snap fiber1 mgt: gtx4/rx1
 NET "txn[1]" LOC = AH2 | IOSTANDARD = "LVDS_25";
 NET "txp[1]" LOC = AH1 | IOSTANDARD = "LVDS_25";
-NET "rxn[1]" LOC = AM6 | IOSTANDARD = "LVDS_25";
-NET "rxp[1]" LOC = AM5 | IOSTANDARD = "LVDS_25";
+#NET "rxn[1]" LOC = AM6 | IOSTANDARD = "LVDS_25";
+#NET "rxp[1]" LOC = AM5 | IOSTANDARD = "LVDS_25";
 
 # location for snap fiber2 mgt: gtx7/rx2
 NET "txn[2]" LOC = AB2 | IOSTANDARD = "LVDS_25";
@@ -418,3 +423,17 @@ NET "dmb_tx[7]" LOC = AL8; #  io_[473]_a0
 NET "dmb_tx[6]" LOC = AK8; #  io_[474]_a1
 NET "dmb_tx[1]" LOC = AN9; #  io_[514]_a19
 NET "dmb_tx[0]" LOC = AP9; #  io_[515]_a18
+
+#jg add the following lines 03/02/2015
+NET "f_sclk"     LOC = W27;
+NET "gbe_fok"    LOC = K23;
+NET "ck_gben" LOC = P5 | IOSTANDARD = "LVDS_25";
+NET "ck_gbep" LOC = P6 | IOSTANDARD = "LVDS_25";
+NET "ckgbe" TNM_NET = "clock_gbe";
+TIMESPEC "TS_clock_gbe" = PERIOD "clock_gbe" 8 ns HIGH 50%;
+
+# location for gbe mgt: gtx19
+NET "gbe_txn" LOC = A4 | IOSTANDARD = "LVDS_25";
+NET "gbe_txp" LOC = A3 | IOSTANDARD = "LVDS_25";
+NET "gbe_rxn" LOC = B6 | IOSTANDARD = "LVDS_25";
+NET "gbe_rxp" LOC = B5 | IOSTANDARD = "LVDS_25";
