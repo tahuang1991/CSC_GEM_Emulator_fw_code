@@ -199,7 +199,7 @@ module CSC_GEM_Emulator(
   // wire  gtx_ready;
    wire [13:0] test_in;  // not used?
    reg 	       l_lock40, ck160_locklost, qpll_lock_lost;
-   reg 	       bc0_r, bc0_rr, bc0_r3, bc0_led;
+   reg 	       bc0_r, bc0_rr, bc0_r3, bc0_led;// never use? Tao*
  //  wire        reset, gtx_reset;
    wire        ext_rst, force_err, bc0, stat0;  // stat[3:0] =  cfebemul_in[2,3,1,4] on Emul board!
    wire ck125, ck160, lhc_ck, lhc_clk, qpll_ck40, slwclk;   // ext 125 usr, QPLL160, ccb_ck40, QPLL40, ccb_ck40/25=1.6MHz
@@ -238,7 +238,7 @@ module CSC_GEM_Emulator(
 // 27 registers for inputs from DMB Loopback, 47 for RPCloop, plus 5 (7?) for SLOWloop
    reg  [46:0] shft_seq, rnd_word;  // slow seq .1 sec shift, loads to flag on pb_pulse  shft_seq = 47'h00000001;
    reg 	       hold_bit;    // debounced !pb signal, held until button release
-   reg 	       debounced_bit;    // sets one pulse for 200 ns  (5 MHz clock)
+   reg 	       debounced_bit;    // sets one pulse for 200 ns  (5 MHz clock)// not use?? Tao*
    reg 	       pb_pulse;  //  <- sw7 & !pb, clears on pb high after 2nd seq. shift (debounce), lasts a while!
    reg 	       err_wait;   // pb_pulse & tc & !wait -> load rnd_word, set wait.  !pb_pulse & tc & wait -> clear wait
    reg 	       ferr_i, ferr_r, ferr_done;
@@ -437,10 +437,7 @@ module CSC_GEM_Emulator(
 	reg [15:0] geminfo_r;
 	reg [4:0] gempad_r;
 	reg [1:0] q;
-
-   assign test_in[11:7] = alct_rx[11:7];
-   assign test_in[13] = alct_rx[13];
-   assign test_in[12] = alct_rx[19];
+/* test-in? H.T.
    assign test_in[0] = sda0;
    assign test_in[1] = tmb_sn;
    assign test_in[2] = t_crit;
@@ -448,7 +445,12 @@ module CSC_GEM_Emulator(
    assign test_in[4] = prom_d3;
    assign test_in[5] = prom_d7;
    assign test_in[6] = alct_rx[23];
+   assign test_in[11:7] = alct_rx[11:7];
+   assign test_in[12] = alct_rx[19];
+   assign test_in[13] = alct_rx[13];
+*/
 
+/*
 // clct_status: temp for testing,  _ccb_tx[8:0] was 9'h0aa, now toggle with push-button
    assign _ccb_tx[8] = pb;
    assign _ccb_tx[7] = !pb;
@@ -729,6 +731,7 @@ module CSC_GEM_Emulator(
 	if (!en_fibertests) selusr = 4'b1101;    // rpc_jtag active, 3 bits only, includes ~1 Hz Vstat2 test
 	else selusr = {2'b00,lout_slowloop[4],lout_slowloop[3]}; // alct_jtag active, 5 bits under test
      end
+*/
 
    ODDR #(.DDR_CLK_EDGE("OPPOSITE_EDGE"), .INIT(1'b0), .SRTYPE("ASYNC")) DMB_FIFO_CLK (.Q(step[1]), .C(lhc_clk), .CE(1'b1), .D1(1'b1), .D2(1'b0), .R(1'b0), .S(1'b0));  // make step[1] an image of lhc_clk, as it goes out and loops back as dmbfifo_step1ck
    
@@ -953,7 +956,7 @@ module CSC_GEM_Emulator(
    assign gtx_reset = reset | !gtx_ready;
    assign rxdv = ~(|rxer | rx_bufstat[2]) & gbe_fok; // idle is K28.5,D16.2  =  BC,50 in time order
 
-
+/* 
 //   always @(posedge _ccb_rx[0] or posedge reset) begin
    always @(posedge ccb_cken or posedge reset) begin
       if(reset) begin
@@ -964,8 +967,8 @@ module CSC_GEM_Emulator(
       end
    end // always @ (posedge _ccb_rx[0] or posedge reset)
 
-
-
+*/
+   /* never use tx_sel, Tao*
    reg  tx_sel;
    always @(posedge tx_clk or posedge gtx_reset) begin
       if(gtx_reset) begin
@@ -975,6 +978,8 @@ module CSC_GEM_Emulator(
 	 tx_sel <= ~tx_sel;
       end
    end
+   */
+ 
    always @(posedge ck40) begin
 	       fiber_reset <= gtx_reset;
 	end
@@ -1076,6 +1081,7 @@ module CSC_GEM_Emulator(
 
 
 // JGhere, probably a lot of lines in the next section can be deleted: 
+/* Tao, part of it may still work therfore it need to be revised?
    always @(posedge slwclk or posedge reset) // everything that uses 1.6 MHz clock with simple Reset (from lhc_clk)
      begin
 	if (reset) begin
@@ -1086,9 +1092,9 @@ module CSC_GEM_Emulator(
 	   shft_seq <= 47'h000000000001;
 	   rnd_word <= 0;
 	   debounced_bit <= 0;
-	   hold_bit <= 0;
-	   err_wait <= 0;
-	   pb_pulse <= 0;
+	   hold_bit <= 0;//Tao??
+	   err_wait <= 0;//Tao??
+	   pb_pulse <= 0;//Tao??
 	   slowloop_count <= 0;
 	   slowloop_err <= 0;
 	   slowloop_stat <= 0;
@@ -1096,10 +1102,10 @@ module CSC_GEM_Emulator(
 	   llout_slowloop <= 0;
 	   in_slowloop <= 0;
 	   slowloop_errcnt <= 0;
-	   gempad_r <= 0;  // JGnew
+	   gempad_r <= 0;  // JGnew //Tao??
 	end
 	else begin
-	   if (debounced_bit) gempad_r[4:0] <= gempad_in[5:1];
+	   if (debounced_bit) gempad_r[4:0] <= gempad_in[5:1];//Tao??
 
 	   free_count <= free_count + 1'b1;
 // JGhere, add slow loop checking logic:
@@ -1160,6 +1166,7 @@ module CSC_GEM_Emulator(
 	   else free_tc <= 0;
 
 	   if (free_tc) shft_seq[46:0] <= {shft_seq[45:0],shft_seq[46]}; // shift a bit over time for "random" word
+//================================: keep this part?,Tao?
 	   if (!pb_pulse) begin
 	      pb_pulse <= sw[7] & !pb; // guaranteed true at least one full "free_tc" cycle
 	      err_wait <= 0;
@@ -1183,11 +1190,13 @@ module CSC_GEM_Emulator(
 	      end
 	   end
 	   if (gtx_ready && time_count < 8'hfe) time_count <= time_count + 1'b1; // use to delay startup; ends.
-	end
-     end
-
+//=====================================================================================
+	end  //end else -->if(reset)
+     end  //end always @(posedge slwclk or posedge reset) 
+*/
 
 // JGhere, probably delete all of the next ~450 lines:
+/*
    always @(posedge dmbfifo_step1ck or posedge reset) // used by one bit on DmbLoopback
      begin
 	if (reset) begin
@@ -1210,7 +1219,7 @@ module CSC_GEM_Emulator(
 	end
      end
 
-
+   //bc0_* are not use anymore? Tao
    always @(negedge lhc_clk or posedge bc0) // everything that uses lhc_clk w/simple Reset
      begin
 	if (bc0) begin // bc0 now High True!
@@ -1339,9 +1348,10 @@ module CSC_GEM_Emulator(
 	   else begin  // step tests are ON when fibertests are Off.
 	      if ( |err_ratloop[46:0] ) ratloop_errcnt <= ((ratloop_errcnt[11:0] + 1'b1) | (ratloop_errcnt[11]<<11));
 	   end
+*/
 
 
-
+/* delete? Tao
 // this is for our "CCB Pulsed Signal" checks: the "fired" register and a pulse counter based on in_pulse and "trigger"
 	   trigger <= ( ( in_pulse_r == 12'h001)||( in_pulse_r == 12'h002)||( in_pulse_r == 12'h004)||( in_pulse_r == 12'h008)||( in_pulse_r == 12'h010)||( in_pulse_r == 12'h020)||( in_pulse_r == 12'h040)||( in_pulse_r == 12'h080)||( in_pulse_r == 12'h100)||( in_pulse_r == 12'h200)||( in_pulse_r == 12'h800)||( in_pulse_r == 12'h400) );
 	   if (trigger) pulse_count <= pulse_count + 1'b1;
@@ -1451,7 +1461,7 @@ module CSC_GEM_Emulator(
    assign _ccb_tx[19] = alct_cfg_out;  // JG, don't invert
    assign _ccb_tx[18] = tmb_cfg_out;   // JG, don't invert
    assign _ccb_tx[17:9] = pulse_count[8:0];  // 9 bit alct_status, to CCB Front Panel (our LED plug)
-   
+*/   
 
 
 // JGhere, Begin new code insertion for GbE and BRAMs:
@@ -1959,10 +1969,12 @@ GBE_T20R20 gbe_gtx (
 */
    always @(*)
      begin   // JG, v1p16: swap LED 3<>4, notes and all
+        /* delete??
 	led_low[0] = !_ccb_rx[22]; // ccb_ttcrx_rdy, always OFF
 	led_low[1] = !_ccb_rx[23]; // ccb_qpll_lck, OFF but often blinks ON (very short)
 	led_low[2] = qpll_lock;    // always ON!   was !_ccb_rx[31] == _alct_adb_pulse_async
 	led_low[3] = qpll_lock_lost; // always OFF?  was _ccb_rx[35] == mpc_in1, always ON
+         */ 
 	led_low[4] = lhc_clk;
 //	led_low[5] = !_ccb_rx[12];   // L1accept
 //	led_low[6] = trigger;      // OR of several trigger pulse inputs
