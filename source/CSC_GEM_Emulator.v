@@ -181,7 +181,7 @@ module CSC_GEM_Emulator(
    wire        synced_snapt;
    wire        snap_clk2, ck160_locked, ck160_rst;
    wire [7:0]  tx_begin, tx_fc;
-   reg  [7:0]  frand, ferr_f;
+   reg  [7:0]  frand, ferr_f;//Not use? Tao??
    reg [15:0]  err_count;
    reg  [7:0]  time_r_snap;
    reg  [7:0]  time_snap;
@@ -241,7 +241,7 @@ module CSC_GEM_Emulator(
    reg 	       debounced_bit;    // sets one pulse for 200 ns  (5 MHz clock)// not use?? Tao*
    reg 	       pb_pulse;  //  <- sw7 & !pb, clears on pb high after 2nd seq. shift (debounce), lasts a while!
    reg 	       err_wait;   // pb_pulse & tc & !wait -> load rnd_word, set wait.  !pb_pulse & tc & wait -> clear wait
-   reg 	       ferr_i, ferr_r, ferr_done;
+   reg 	       ferr_i, ferr_r, ferr_done;//not use Tao??
 
 // JG, new declarations for GbE and BRAM use:
    wire  gbe_refck; // GTXE1 ref clk, used for MGTref and DoubleReset clock
@@ -1993,7 +1993,7 @@ GBE_T20R20 gbe_gtx (
 	      led_hi[11] = !reset;    // M1: HI
 	      led_hi[12] = lhc_clk;   // M1: Good!
 	      led_hi[13] = (locked & lhc_locked); // M1: 
-	      led_hi[14] = slwclk;
+	      led_hi[14] = slwclk;//Not use? Tao??
 	      led_hi[15] = !ck160_locklost;   // M1: 
 	      //test_led[6:5] = 0;//
 /*
@@ -2006,8 +2006,8 @@ GBE_T20R20 gbe_gtx (
 */
 	      //test_led[7] = reset;   // 
 	      //test_led[8] = bc0_led; // 
- 	      test_led[9] = bc0;     // 
-	      test_led[10]  = bc0_r3; // 
+ 	      test_led[9] = bc0;     //not use anymore?? Tao?? 
+	      test_led[10]  = bc0_r3; //the same as above
 //	      led_low = 0;
 	   end
 // tx_begin (!sw7), tx_fc, rx_strt, rx_valid, rx_match
