@@ -836,6 +836,7 @@ module CSC_GEM_Emulator(
    wire [8:0] rd_addr;
    reg [15:0] rd_ptr=0;
    reg [7:0]  cmd_code_r=0, cmd_code_rr=0, nbx_r=0, ibx=0;
+	reg    dump_enable=0,  dump_loop_i=0, event_enable=0;
    reg 	 dump_enable_r=0, dump_enable_rr=0, dump_loop_r=0, event_enable_r=0, dump_done=0, event_done=0;
    always @(posedge ck40) begin
       fiber_reset <= gtx_reset;
@@ -856,14 +857,14 @@ module CSC_GEM_Emulator(
       else if (event_enable_r) event_done <= (ibx==nbx_r);  // event_done is used in gbe cmd section
       else event_done <= 1'b0;
 
-      if ( gtx_reset || ((cmd_code_r == 0xf0f0)&&(cmd_code_rr == 0xf0f0)) || ((cmd_code_r == 0xf7f7)&&(cmd_code_rr == 0xf7f7)) ) begin
+      if ( gtx_reset || ((cmd_code_r == 16'hf0f0)&&(cmd_code_rr == 16'hf0f0)) || ((cmd_code_r == 16'hf7f7)&&(cmd_code_rr == 16'hf7f7)) ) begin
 	 rd_ptr <= 0;
 	 ibx <= 0;
       end
       else if (dump_enable_rr | event_enable_r) begin
-	 if (!event_done) rd_ptr <= rd_ptr + 1'b1; // JGhere, use rd_ptr as BRAM RdAddr unless f3f3 is set?  use sel_rdclk for it!
-	 if (dump_enable_r) ibx <= 0;
-	 else if (ibx<nbx_r) ibx <= ibx + 1'b1;
+	           if (!event_done) rd_ptr <= rd_ptr + 1'b1; // JGhere, use rd_ptr as BRAM RdAddr unless f3f3 is set?  use sel_rdclk for it!
+	           if (dump_enable_r) ibx <= 0;
+	           else if (ibx<nbx_r) ibx <= ibx + 1'b1;
       end
       else ibx <= 0;
    end
@@ -1550,7 +1551,7 @@ module CSC_GEM_Emulator(
 	   rx_timeout <= 1'b0;
 	   data_bram <= 16'hd1d0;
 	   data_bram_r <= 16'he4e2;
-	   sel_rdclk=1'b0;
+	   sel_rdclk <= 1'b0;
 	   event_done_r <= 0;
 	   dump_done_r <= 0;
 	   dump_loop_i <= 0;
