@@ -3,91 +3,38 @@
 // *** JRG, firmware for Fiber Tx Bench Board, used for GEM-CSC pattern tests **
 //  Only for use on 2010 prototype boards; compile it for the XC6VLX195T FPGA
 //
-// Create Date:    1:22 1/15/13
+// Create Date:    3/4/15
 // Design Name: 
 // Module Name:    CSC_GEM_emulator
-//
-// started from dcfeb_test code v3.19.  Versioning info below.
-//  1.1: just get PRBS test working, with err_count sent to GbE at ~1 Hz. sw8: Force err on PB & sw7. why groups of 4?
-//        -- use MTP fiber 12
-//  1.2: try to add triad word inject and readout via GbE. !sw8: load data on PB & sw7. -- bug in gbe tx_dat logic
-//  1.3: fixed bug, works well.  Maybe too many triad words get injected... tuned LED assignments
-//  1.4: constrain inject triad to single clk80 period, hijack ferr_r logic.   d001f004?
-//        -- I don't see any cause for groups of 4 forced errors...
-//  1.5: bring rx_fc to test_led10.  also qpll_lock, rx_sync_done.  changed these 4 TPs are set same (5,7,9,10).
-//  1.6: send sw[8:7] to FP LEDs, also QPLL_Lock, rst/pb...etc.
-//  1.7: add NullVMEop logic, mod UCF.  debug triad transmit function...use to test triad RECEIVE function!
-//  1.8: edit UCF, lots of backplane probing logic for ccb_rx1,12,22-35 to LEDs and ccb_tx0-19 to CCB.
-//        -- remove Translator Loopback test & set on-board TMB bidir bus control signals to good state:
-//         /gtl_oe=0, gtl_loop=0, dmb_loop=0, rpc_loop=0, ccb_status_oe=1, /dmb_oe=0
-//  1.9: adjust some output assign values, make fp-LED7 OR of !pb + !L1reset
-//  1.10: add control for both hard_reset_fpga signals, invert some fp-LED signals,
-//        add trigger counter for 10 CCB pulses and CCB L1Reset function
-//  1.11: add 16-bit-serialized readout of results register via TMB_CFG_DONE, with ALCT_CFG_DONE as handshake
-//        -- activated with CCB_CMD 33h (load CCB VME "CMD bus" register with CCh)
-//        -- any non-33 CMD will clear the results register
-//        -- currently sends only the results for pulse_count
-//  1.12: increase Results register to 20 bits, decode & return all 8 bits of the CMD code
-//        -- establish a few new active functions: readback data_reg & pulses_fired, include ALCTadbs & HardRst, also TMBres0
-//        -- defined a set of futire functions that will be needed
-//  1.13: make some fixes in pulses_fired and results_r
-//  1.14: make some fixes in cmd CC results & get_bit_ptr.  Added logic to check most CCB signals to TMB using CMDs CC & C0.
-//        -- also trying 5-bit tmb_reserved_in data bus to the CCB & added a test for TMB_L1Arelease/request lines
-//  1.15: fix serial results_reg "end" signal, change tmb_l1a_relreq logic, tweak ccb_cmd_r control logic
-//  1.16: add Lock monitor logic for QPLL and ck160, put ccb_rx[0] into a BUFR for improved performance, but did not help!
-//  2.0:  TMB mainboard is now loopback-safe (2.5 V) so enable DMB-Loop & RPC-Loop.  Enable Loops for CCB test signals.
-//  2.1:  Add all DMB-Loop logic & load readback registers for software checks.  NO UCF entries for ccb_rx[50:48], yikes!
-//  2.2:  Added UCF entries for ccb_rx[50:48], UN-inverted tmb_l1a_relreq inputs from ccb_rx[25:24].
-//        -- Add TrigStop/Start functions for test control, but defaults to ON at Reset, Start not normally needed?
-//  2.3:  Add fixes for dmbfifo_step1ck tests.  No clock, looks frozen; try Step1 next....
-//  2.4:  Add STEP control, use ODDR to drive step1 as mirror of lhc_ck to dmbfifo_ck via DMB_Loopback
-//  2.5:  Put all 40 MHz functions into lhc_ck domain, add 7 ccb_cmd diagnostic signals & qpll_lock to test_leds
-//  2.6:  Use tmb_clock0 now for CCB bus communications, so Step4 can be used in other tests
-//        -- LONG TERM: FIX the clocking to the QPLL, better to use tmb_clock1 instead of tmb_clock05p (FPGA SEU can screw QPLL)
-//        -- fixed all DMB Loop logic to run on slwclk, bring loop[3] out&in to LEDs
-//  2.7:  add another EN delay inside PRBS39 & initialize ALL registers in there; add llout_dmbloop for testLEDs;
-//        add good_dmbloop monitoring too
-//        -- force bit err_dmbloop[27] to zero, but add debug for its lhc_tog_err in sw[7] testLEDs
-//  2.8:  take dmbloop back to 40 MHz; fix trig_stop/start 07/06 encoding; activate step4 with en_loopbacks (no sw[8] now)
-//  2.9:  en_loopbacks defails to 0 now; add a lhcloop_ck-lhc_ck sync step for en_lhcloop before toggle error check
-//  2.10: bring err_dmbloop[3] to sw7 Low test_LED; put LHC_CK into PRBS39!   Note: STEP4 KILLS QPLL (TMB_clock0) @TMB!!
 // 
-//  3.0:  add RAT Loop signals, new UCF too: 47 easy out-N-back + 8 more complicated involving RPCtx/JTAG control
-//        -- 55 outs: RPCtx(0-7), RPCrx(10-25), ALCTtx(0-29,31).  5 + 2 JTAG lines are SLOW (1.6 MHz), and 1 is SLOWER (~1 Hz)
-//        -- 55 ins (inc. JTAG MUXes on TMB):  RPCrx(0-9,26-38), ALCTrx(0-30), 1 Hz Vstat2.  Make 47 FAST results + 8 SLOW results
-//        -- Results include RATstat1-4(47), SLOWstat(8), RATerrCnt, SLOWerrCnt, SLOWcount & HzCount for # of respective trials
-//        -- JTAG "5" test enabled with (en_loopbacks & en_fibertests)
-//        -- JTAG "3" test (inc. 1 Hz Vstat2) enabled with (en_loopbacks & !en_fibertests)
-//        -- step4 enabled with (en_loopbacks & !en_fibertests): allows tests for DmbFIFOclk & RATloop(27,30)  (step 1,0,2 resp.)
-//        -- Reset & Powerup default is  en_loopbacks = en_fibertests = en_cabletests = 0
-//  3.1:  take care of "step" test cases (step 1,0,2).  These are dmb_loop27, rat_loop27 and rat_loop30.
-//  3.2:  fix a startup bug in dmbloop[27], fix bug in ratloop[24], bring 4 RATloops to test_leds (1,13,18,19)
-//        -- note: en_loopbacks should not be set before en_fibertests
-//  3.3:  bring out RAWIN signals to check ratloop timing relative to lhc_ck and "louts"
-//        -- first check EPIC if "in_" & "llout_" are not put into IO block registers.  -> YES, in IOBs.
-//  3.4:  send LOUTs for ratloops 0.5 lhc_ck cycle sooner (old LOUTs called LOUTPOS now).  Fix typo on ratloop18.
-//        -- *temp* just for testLED selection, made en_cabletests equivalent to sw[7] (send cmd = 1a in software)
-//  3.5:  CHANGED to SPEED GRADE -1!  Modified just one MMCM for this.  Good! in_ratloop1 stuck LOW on Mezz#1, io_397 open at translator.
-//        -- add MMCM for LHC_CK to get phase90, apply negedge 90 (= 270?) for ratloop LOUT registers
-//  3.6-3.7:  special tests to debug Mezz#1 rawin_ratloop[1] (stuck low, bad ball joint @translator chip)
-//  3.8:  enable ForceError on fiber for Tx output as well as on Rx input.  lhc_clk is DEAD on the bench!
-//  3.9:  use qpll_ck40 to drive lhc_clk (not lhc_ck), now try to force Tx errors.  delete GTX LOC constraint from Ben's code
-//  3.10err: ...send random data for 7-8 fibers, only rx for #1.  try removing comp_rx BUFGs
-//  3.10: ...remove all GBE logic & unused logic & extra clocks!
-//  3.11: fix error generator debounce, bring it to LED with slwclk too -- always errors from fiber, why?
-//  3.12: make some fixes for forced error generation (shft_seq, pb_pulse, rnd_word) -- always errors from fiber, why?
-//  3.13: initalize several registers properly related to ferr_z & triad_word
-//  3.14: change settings inside MGT MMCM module
-//  3.15: add logic to Reset MMCMs in sequence, add hold_bit for debounced !pb signal
-//  3.16: took away most logic using ck125, added SRL16Es to Reset MMCMs at startup, changed LOCK logics, changed testLEDs.
-//        -- add FCS=1 and float gtl_oe for Mezz 2012 compatibility, good for bench test use.
-//  3.17: changed to bufg_x2div2 MMCM, watch the lock40 signal.  -- Looks good! ( <- only edit after last compile )
-//  3.18: changed "test_led(1-4)" to inputs from connector, added "bc0" as input #1 to reset PRBS for fiber TX(1-7)
-//       -- bc0 also toggles a register going to an LED.  Changed all LEDs & test_leds.
-//  3.19: now handles high-true bc0(test_led1), ext_rst(test_led2) and ForceError(test_led3) inputs (was Low True)
-//       -- assigned these to appropriate functions like reset & ferr_i 
-//
+// Added BRAMs b00 to bff and associated GbE command functions (F3F3/F7F7 for Read/Write)
+// Need to add more command functions:
+//   FEFE to send one event... the first data word NUM can specify how many BX to send for the "event"
+//    - this comand will not "zero" the Read pointer
+//   F0F0 to rewind the Read pointer back to address zero
+//    - F7F7 will zero the Read pointer too (F3F3 has a separate read controller for GTX, does not to reset our pointer)
+//   FDFD to dump all contents of BRAMs... perhaps a "C" data code sent with this can initiate a continuous repeat loop?
+//    - receipt of any "non-FD" function will immediately halt the repeat loop
+//   F3F3 will switch the RDCLK source to 62.5 MHz
+//    - for all other cases the default RDCLK is 40 MHz (negedge?)
+// 
+// Need to control...
+//          .ADDRARDADDR ({1'b1, tx_adr[10:2], 6'h3f}),  // 16 bit RDADDR, but only 14:6 are used w/ECC.  1/3f?
+//          .ENARDEN ((cmd_code == 16'hf3f3) & (bk_adr == v) & gtx_ready),  // RDEN    ***REPLACE the f3f3 with a 1-bit signal***
+//          .CLKARDCLK   (gbe_txclk2 or ck40 with f3f3 switch), //  RDCLK     ***uses sel_rdclk***
 //  
+//   Make Read Pointer "rd_ptr"
+//    - this can be a 16-bit counter that runs at ck40 speed, but only 9 Adr bits are needed for a BRAM (so 7 bits can access extra BRAMs if needed)
+//    - the lowest 9 bits must be MUXed with tx_adr[10:2] to form the read address bus (rd_ptr is default, but F3F3 enables tx_adr)
+//    - similarly the RDCLK source default is ck40, but F3F3 enables ck625
+//   rd_ptr counter behavior:
+//    - FDFD will enable the counter and connect DOUT to the GTX TxDat bus for 512 clocks, then afterwards set the GTX TxDat bus to zero
+//         -- however, if "C" is set it will enable them until cancelled by a new command
+//    - FEFE will enable the counter and connect DOUT to the GTX TxDat bus for NUM clocks, then afterwards set the GTX TxDat bus to zero
+//    - rd_ptr is reset by F0F0 or F7F7
+// 
+// 
+// 
 //  
 //  about clocks:
 //   QPLL links with tmb_clock05p (no delay), which is disabled when step4=Hi and prevents QPLL lock (bad)
@@ -181,7 +128,7 @@ module CSC_GEM_Emulator(
    wire        synced_snapt;
    wire        snap_clk2, ck160_locked, ck160_rst;
    wire [7:0]  tx_begin, tx_fc;
-   reg  [7:0]  frand, ferr_f;//Not use? Tao??
+   reg  [7:0]  frand, ferr_f;
    reg [15:0]  err_count;
    reg  [7:0]  time_r_snap;
    reg  [7:0]  time_snap;
@@ -199,7 +146,7 @@ module CSC_GEM_Emulator(
   // wire  gtx_ready;
    wire [13:0] test_in;  // not used?
    reg 	       l_lock40, ck160_locklost, qpll_lock_lost;
-   reg 	       bc0_r, bc0_rr, bc0_r3, bc0_led;// never use? Tao*
+   reg 	       bc0_r, bc0_rr, bc0_r3, bc0_led;
  //  wire        reset, gtx_reset;
    wire        ext_rst, force_err, bc0, stat0;  // stat[3:0] =  cfebemul_in[2,3,1,4] on Emul board!
    wire ck125, ck160, lhc_ck, lhc_clk, qpll_ck40, slwclk;   // ext 125 usr, QPLL160, ccb_ck40, QPLL40, ccb_ck40/25=1.6MHz
@@ -210,6 +157,9 @@ module CSC_GEM_Emulator(
    wire [31:0] zero32 = 0;
    wire [12:0] low = 0;
   // wire [3:0]  ignore;  // outputs from GTX we don't care about
+
+   wire        ck40, ck40buf, rdclk;
+   reg 	sel_rdclk;
 
 // Add-ons for Ben dCFEB testing:
    wire    tx_clk_out, tx_clk;
@@ -238,10 +188,10 @@ module CSC_GEM_Emulator(
 // 27 registers for inputs from DMB Loopback, 47 for RPCloop, plus 5 (7?) for SLOWloop
    reg  [46:0] shft_seq, rnd_word;  // slow seq .1 sec shift, loads to flag on pb_pulse  shft_seq = 47'h00000001;
    reg 	       hold_bit;    // debounced !pb signal, held until button release
-   reg 	       debounced_bit;    // sets one pulse for 200 ns  (5 MHz clock)// not use?? Tao*
+   reg 	       debounced_bit;    // sets one pulse for 200 ns  (5 MHz clock)
    reg 	       pb_pulse;  //  <- sw7 & !pb, clears on pb high after 2nd seq. shift (debounce), lasts a while!
    reg 	       err_wait;   // pb_pulse & tc & !wait -> load rnd_word, set wait.  !pb_pulse & tc & wait -> clear wait
-   reg 	       ferr_i, ferr_r, ferr_done;//not use Tao??
+   reg 	       ferr_i, ferr_r, ferr_done;
 
 // JG, new declarations for GbE and BRAM use:
    wire  gbe_refck; // GTXE1 ref clk, used for MGTref and DoubleReset clock
@@ -249,7 +199,7 @@ module CSC_GEM_Emulator(
    wire  gbe_txclk2, gbe_txclk2_buf;   // drives logic for Tx, the "internal" choice for USR clock
    wire  txoutclk_mmcm_lk;
 
-   parameter BRAM_LIM = 12'hbff; // bff: Try 256 Bram's -> bff, or 8 -> b07.
+   parameter BRAM_LIM = 12'h007; // was bff for 256 Bram's: bff, or 8 -> b07.
    parameter GBE_LIM = 16'h080b;  // WORDcount limit. allow extra bytes for MAC preamble, addr's...
    reg [15:0] pkt_lim; // BytecountLimit/2. Plus extra 22 bytes for MAC preamble etc.
    reg [15:0] counter;  // ^^^ 1st data word @ counter == 12; need 11 extra word counts, 22 bytes.
@@ -283,16 +233,16 @@ module CSC_GEM_Emulator(
    wire        rxdv;
 
    reg  [15:0] data_bram, data_bram_r;  // these are the BRAM MUX bus & register
-   wire [63:0] data_oram[BRAM_LIM:12'hb00];
+   wire [63:0] data_oram[BRAM_LIM:12'h000];
    reg  [63:0] data_iram;
-   wire [BRAM_LIM:12'hb00] sbiterr_oram,  dbiterr_oram;
+   wire [BRAM_LIM:12'h000] sbiterr_oram,  dbiterr_oram;
    reg         cycle4, cmd_f7f7;  // use this to toggle bram WRITE every 4th GbE word during cmd=f7f7
 
    reg         crc_en, crc_rst;
    wire [31:0] crc_out;
    reg  [15:0] byte_count;
    reg l_lock125, ck125_locklost;
-	reg [7:0] time_r,time_r_i;
+   reg [7:0] time_r,time_r_i;
 	
 	
    assign f_sclk   = 1'b1;  // to Finisar GbE Transceiver
@@ -308,124 +258,30 @@ module CSC_GEM_Emulator(
 	wire [15:0] geminfo[31:0];
 	
 	assign geminfo[0][15:0]=16'd0;
-	//assign geminfo[1]=16'd6;
 	assign geminfo[1][15:0]=16'd7;
-	//assign geminfo[1]=16'd8;
-	//assign geminfo[1]=16'd9;
-	//assign geminfo[1]=16'd10;
-	//assign geminfo[2]=16'd11;
-	//assign geminfo[2]=16'd12;
 	assign geminfo[2][15:0]=16'd13;
-	//assign geminfo[2]=16'd14;
-	//assign geminfo[2]=16'd15;
-	//assign geminfo[3]=16'd16;
-	//assign geminfo[3]=16'd17;
 	assign geminfo[3][15:0]=16'd18;
-	//assign geminfo[3]=16'd19;
-	//assign geminfo[4]=16'd20;
-	//assign geminfo[4]=16'd21;
 	assign geminfo[4][15:0]=16'd22;
-	//assign geminfo[4]=16'd23;
-	//assign geminfo[4]=16'd24;
-	//assign geminfo[5]=16'd25;
-	//assign geminfo[5]=16'd26;
 	assign geminfo[5][15:0]=16'd27;
-	//assign geminfo[5]=16'd28;
-	//assign geminfo[5]=16'd29;
-	//assign geminfo[6]=16'd30;
-	//assign geminfo[6]=16'd31;
 	assign geminfo[6][15:0]=16'd32;
-	//assign geminfo[6]=16'd33;
-	//assign geminfo[6]=16'd34;
-	//assign geminfo[7]=16'd35;
-	//assign geminfo[7]=16'd36;
 	assign geminfo[7][15:0]=16'd37;
-	//assign geminfo[7]=16'd38;
-	//assign geminfo[7]=16'd39;
-	//assign geminfo[8]=16'd40;
-	//assign geminfo[8]=16'd41;
 	assign geminfo[8][15:0]=16'd42;
-	//assign geminfo[8]=16'd43;
-	//assign geminfo[8]=16'd44;
-	//assign geminfo[9]=16'd45;
-	//assign geminfo[9]=16'd46;
 	assign geminfo[9][15:0]=16'd47;
-	//assign geminfo[9]=16'd48;
-	//assign geminfo[9]=16'd49;
-	//assign geminfo[10]=16'd50;
-	//assign geminfo[10]=16'd51;
 	assign geminfo[10][15:0]=16'd52;
-	//assign geminfo[10]=16'd53;
-	//assign geminfo[10]=16'd54;
-	//assign geminfo[11]=16'd55;
-	//assign geminfo[11]=16'd56;
 	assign geminfo[11][15:0]=16'd57;
-	//assign geminfo[11]=16'd58;
-	//assign geminfo[11]=16'd59;
-	//assign geminfo[12]=16'd60;
-	//assign geminfo[12]=16'd61;
 	assign geminfo[12][15:0]=16'd62;
-	//assign geminfo[12]=16'd63;
-	//assign geminfo[12]=16'd64;
-	//assign geminfo[13]=16'd65;
-	//assign geminfo[13]=16'd66;
 	assign geminfo[13][15:0]=16'd67;
-	//assign geminfo[13]=16'd68;
-	//assign geminfo[13]=16'd69;
-	//assign geminfo[14]=16'd70;
-	//assign geminfo[14]=16'd71;
 	assign geminfo[14][15:0]=16'd72;
-	//assign geminfo[14]=16'd73;
-	//assign geminfo[14]=16'd74;
-	//assign geminfo[15]=16'd75;
-	//assign geminfo[15]=16'd76;
 	assign geminfo[15][15:0]=16'd77;
-	//assign geminfo[15]=16'd78;
-	//assign geminfo[15]=16'd79;
-	//assign geminfo[16]=16'd80;
-	//assign geminfo[16]=16'd81;
 	assign geminfo[16][15:0]=16'd82;
-	//assign geminfo[16]=16'd83;
-	//assign geminfo[16]=16'd84;
-	//assign geminfo[17]=16'd85;
-	//assign geminfo[17]=16'd86;
 	assign geminfo[17][15:0]=16'd87;
-	//assign geminfo[17]=16'd88;
-	//assign geminfo[17]=16'd89;
-	//assign geminfo[18]=16'd90;
-	//assign geminfo[18]=16'd91;
 	assign geminfo[18][15:0]=16'd92;
-	//assign geminfo[18]=16'd93;
-	//assign geminfo[18]=16'd94;
-	//assign geminfo[19]=16'd95;
-	//assign geminfo[19]=16'd96;
 	assign geminfo[19][15:0]=16'd97;
-	//assign geminfo[19]=16'd98;
-	//assign geminfo[19]=16'd99;
-	//assign geminfo[20]=16'd100;
-	//assign geminfo[20]=16'd101;
 	assign geminfo[20][15:0]=16'd102;
-	//assign geminfo[20]=16'd103;
-	//assign geminfo[20]=16'd104;
-	//assign geminfo[21]=16'd105;
-	//assign geminfo[21]=16'd106;
 	assign geminfo[21][15:0]=16'd107;
-	//assign geminfo[21]=16'd108;
-	//assign geminfo[21]=16'd109;
-	//assign geminfo[22]=16'd110;
-	//assign geminfo[22]=16'd111;
 	assign geminfo[22][15:0]=16'd112;
-	//assign geminfo[22]=16'd113;
-	//assign geminfo[23]=16'd114;
-	//assign geminfo[23]=16'd115;
 	assign geminfo[23][15:0]=16'd116;
-	//assign geminfo[23]=16'd117;
-	//assign geminfo[23]=16'd118;
-	//assign geminfo[24]=16'd119;
-	//assign geminfo[24]=16'd120;
 	assign geminfo[24][15:0]=16'd121;
-	//assign geminfo[24]=16'd122;
-	//assign geminfo[24]=16'd123;
 	assign geminfo[25][15:0]=16'd0;
 	assign geminfo[26][15:0]=16'd0;
 	assign geminfo[27][15:0]=16'd0;
@@ -437,7 +293,10 @@ module CSC_GEM_Emulator(
 	reg [15:0] geminfo_r;
 	reg [4:0] gempad_r;
 	reg [1:0] q;
-/* test-in? H.T.
+
+   assign test_in[11:7] = alct_rx[11:7];
+   assign test_in[13] = alct_rx[13];
+   assign test_in[12] = alct_rx[19];
    assign test_in[0] = sda0;
    assign test_in[1] = tmb_sn;
    assign test_in[2] = t_crit;
@@ -445,12 +304,7 @@ module CSC_GEM_Emulator(
    assign test_in[4] = prom_d3;
    assign test_in[5] = prom_d7;
    assign test_in[6] = alct_rx[23];
-   assign test_in[11:7] = alct_rx[11:7];
-   assign test_in[12] = alct_rx[19];
-   assign test_in[13] = alct_rx[13];
-*/
 
-/*
 // clct_status: temp for testing,  _ccb_tx[8:0] was 9'h0aa, now toggle with push-button
    assign _ccb_tx[8] = pb;
    assign _ccb_tx[7] = !pb;
@@ -650,7 +504,7 @@ module CSC_GEM_Emulator(
    assign dmb_o2tx[37:34] = lout_dmbloop[25:22];
    assign dmb_o3tx[44] = lout_dmbloop[26];
    assign rawin_dmbloop[26:21] = {dmb_i3tx[43],dmb_i3tx[41:38],dmb_i3tx[42]};
-// JGhere, RAT_Loopback signals:
+//  RAT_Loopback signals:
    assign rpc_tx[3:0] = lout_ratloop[3:0]; // [3] is actually alct_tx29
    assign smb_clk = lout_ratloop[4];
    assign alct_txa[17:5] = lout_ratloop[17:5];
@@ -713,7 +567,6 @@ module CSC_GEM_Emulator(
    assign rawin_ratloop[45] = alct_rx[27];
    assign rawin_ratloop[46] = rpc_i2rx[26];
 
-   assign err_dmbloop[27] = lhc_tog_err; // JGhere, Fixed?  uses lhc_clk 40, but could use prbs data?
    assign good_dmbloop[27] = !(|err_dmbloop);
 
 //   assign step[4] = en_loopbacks; // ~sw[8];  // step4 Low makes free clocks from TMB; Hi allows logic signals for clocks
@@ -731,7 +584,6 @@ module CSC_GEM_Emulator(
 	if (!en_fibertests) selusr = 4'b1101;    // rpc_jtag active, 3 bits only, includes ~1 Hz Vstat2 test
 	else selusr = {2'b00,lout_slowloop[4],lout_slowloop[3]}; // alct_jtag active, 5 bits under test
      end
-*/
 
    ODDR #(.DDR_CLK_EDGE("OPPOSITE_EDGE"), .INIT(1'b0), .SRTYPE("ASYNC")) DMB_FIFO_CLK (.Q(step[1]), .C(lhc_clk), .CE(1'b1), .D1(1'b1), .D2(1'b0), .R(1'b0), .S(1'b0));  // make step[1] an image of lhc_clk, as it goes out and loops back as dmbfifo_step1ck
    
@@ -956,7 +808,7 @@ module CSC_GEM_Emulator(
    assign gtx_reset = reset | !gtx_ready;
    assign rxdv = ~(|rxer | rx_bufstat[2]) & gbe_fok; // idle is K28.5,D16.2  =  BC,50 in time order
 
-/* 
+
 //   always @(posedge _ccb_rx[0] or posedge reset) begin
    always @(posedge ccb_cken or posedge reset) begin
       if(reset) begin
@@ -967,8 +819,8 @@ module CSC_GEM_Emulator(
       end
    end // always @ (posedge _ccb_rx[0] or posedge reset)
 
-*/
-   /* never use tx_sel, Tao*
+
+
    reg  tx_sel;
    always @(posedge tx_clk or posedge gtx_reset) begin
       if(gtx_reset) begin
@@ -978,11 +830,46 @@ module CSC_GEM_Emulator(
 	 tx_sel <= ~tx_sel;
       end
    end
-   */
- 
+
+
+
+   wire [8:0] rd_addr;
+   reg [15:0] rd_ptr=0;
+   reg [7:0]  cmd_code_r=0, cmd_code_rr=0, nbx_r=0, ibx=0;
+   reg 	 dump_enable_r=0, dump_enable_rr=0, dump_loop_r=0, event_enable_r=0, dump_done=0, event_done=0;
    always @(posedge ck40) begin
-	       fiber_reset <= gtx_reset;
-	end
+      fiber_reset <= gtx_reset;
+
+      dump_enable_r <= dump_enable;
+      dump_loop_r <= dump_loop & dump_enable_r; // dump_loop is set in gbe cmd section
+      event_enable_r <= event_enable;
+      nbx_r <= nbx;
+      cmd_code_r <= cmd_code;
+      cmd_code_rr <= cmd_code_r;
+
+      if (gtx_reset)  dump_done <= 1'b0;
+      else if (dump_enable_rr) dump_done <= (&rd_ptr[8:1]);  // end dump when rd_ptr is 1FE or 1FF
+      else dump_done <= 1'b0;
+      dump_enable_rr <= (!dump_done | dump_loop_r) & dump_enable & dump_enable_r;
+
+      if (gtx_reset)  event_done <= 1'b0;
+      else if (event_enable_r) event_done <= (ibx==nbx_r);  // event_done is used in gbe cmd section
+      else event_done <= 1'b0;
+
+      if ( gtx_reset || ((cmd_code_r == 0xf0f0)&&(cmd_code_rr == 0xf0f0)) || ((cmd_code_r == 0xf7f7)&&(cmd_code_rr == 0xf7f7)) ) begin
+	 rd_ptr <= 0;
+	 ibx <= 0;
+      end
+      else if (dump_enable_rr | event_enable_r) begin
+	 if (!event_done) rd_ptr <= rd_ptr + 1'b1; // JGhere, use rd_ptr as BRAM RdAddr unless f3f3 is set?  use sel_rdclk for it!
+	 if (dump_enable_r) ibx <= 0;
+	 else if (ibx<nbx_r) ibx <= ibx + 1'b1;
+      end
+      else ibx <= 0;
+   end
+   assign send_event = dump_enable_rr || (event_enable_r & !event_done);  // use this OR (f3f3 && (bk_adr == v)) to Read Enable the BRAMs
+
+
    always @(negedge ck40 or posedge hold_bit) begin  // 80 MHz derived from GTX_TxPLL
       if(hold_bit) begin
 	 geminfo_r <= 0;
@@ -1081,7 +968,6 @@ module CSC_GEM_Emulator(
 
 
 // JGhere, probably a lot of lines in the next section can be deleted: 
-/* Tao, part of it may still work therfore it need to be revised?
    always @(posedge slwclk or posedge reset) // everything that uses 1.6 MHz clock with simple Reset (from lhc_clk)
      begin
 	if (reset) begin
@@ -1092,9 +978,9 @@ module CSC_GEM_Emulator(
 	   shft_seq <= 47'h000000000001;
 	   rnd_word <= 0;
 	   debounced_bit <= 0;
-	   hold_bit <= 0;//Tao??
-	   err_wait <= 0;//Tao??
-	   pb_pulse <= 0;//Tao??
+	   hold_bit <= 0;
+	   err_wait <= 0;
+	   pb_pulse <= 0;
 	   slowloop_count <= 0;
 	   slowloop_err <= 0;
 	   slowloop_stat <= 0;
@@ -1102,13 +988,13 @@ module CSC_GEM_Emulator(
 	   llout_slowloop <= 0;
 	   in_slowloop <= 0;
 	   slowloop_errcnt <= 0;
-	   gempad_r <= 0;  // JGnew //Tao??
+	   gempad_r <= 0;  // JGnew
 	end
 	else begin
-	   if (debounced_bit) gempad_r[4:0] <= gempad_in[5:1];//Tao??
+	   if (debounced_bit) gempad_r[4:0] <= gempad_in[5:1];
 
 	   free_count <= free_count + 1'b1;
-// JGhere, add slow loop checking logic:
+// slow loop checking logic:
 	   lout_slowloop[4] <= out_slowloop[4];
 	   lout_slowloop[3] <= out_slowloop[3];
 	   lout_slowloop[1] <= out_slowloop[1];
@@ -1166,7 +1052,6 @@ module CSC_GEM_Emulator(
 	   else free_tc <= 0;
 
 	   if (free_tc) shft_seq[46:0] <= {shft_seq[45:0],shft_seq[46]}; // shift a bit over time for "random" word
-//================================: keep this part?,Tao?
 	   if (!pb_pulse) begin
 	      pb_pulse <= sw[7] & !pb; // guaranteed true at least one full "free_tc" cycle
 	      err_wait <= 0;
@@ -1190,13 +1075,11 @@ module CSC_GEM_Emulator(
 	      end
 	   end
 	   if (gtx_ready && time_count < 8'hfe) time_count <= time_count + 1'b1; // use to delay startup; ends.
-//=====================================================================================
-	end  //end else -->if(reset)
-     end  //end always @(posedge slwclk or posedge reset) 
-*/
+	end
+     end
+
 
 // JGhere, probably delete all of the next ~450 lines:
-/*
    always @(posedge dmbfifo_step1ck or posedge reset) // used by one bit on DmbLoopback
      begin
 	if (reset) begin
@@ -1219,7 +1102,7 @@ module CSC_GEM_Emulator(
 	end
      end
 
-   //bc0_* are not use anymore? Tao
+
    always @(negedge lhc_clk or posedge bc0) // everything that uses lhc_clk w/simple Reset
      begin
 	if (bc0) begin // bc0 now High True!
@@ -1348,10 +1231,9 @@ module CSC_GEM_Emulator(
 	   else begin  // step tests are ON when fibertests are Off.
 	      if ( |err_ratloop[46:0] ) ratloop_errcnt <= ((ratloop_errcnt[11:0] + 1'b1) | (ratloop_errcnt[11]<<11));
 	   end
-*/
 
 
-/* delete? Tao
+
 // this is for our "CCB Pulsed Signal" checks: the "fired" register and a pulse counter based on in_pulse and "trigger"
 	   trigger <= ( ( in_pulse_r == 12'h001)||( in_pulse_r == 12'h002)||( in_pulse_r == 12'h004)||( in_pulse_r == 12'h008)||( in_pulse_r == 12'h010)||( in_pulse_r == 12'h020)||( in_pulse_r == 12'h040)||( in_pulse_r == 12'h080)||( in_pulse_r == 12'h100)||( in_pulse_r == 12'h200)||( in_pulse_r == 12'h800)||( in_pulse_r == 12'h400) );
 	   if (trigger) pulse_count <= pulse_count + 1'b1;
@@ -1461,7 +1343,7 @@ module CSC_GEM_Emulator(
    assign _ccb_tx[19] = alct_cfg_out;  // JG, don't invert
    assign _ccb_tx[18] = tmb_cfg_out;   // JG, don't invert
    assign _ccb_tx[17:9] = pulse_count[8:0];  // 9 bit alct_status, to CCB Front Panel (our LED plug)
-*/   
+   
 
 
 // JGhere, Begin new code insertion for GbE and BRAMs:
@@ -1537,11 +1419,14 @@ module CSC_GEM_Emulator(
 
 //    BUFG clkf_buf(.O (clkfbout_buf), .I (clkfbout));
     BUFG clkf_buf(.O (gbe_txclk2), .I (gbe_txclk2_buf));
+    BUFGMUX rdclk_buf(.O (rdclk), .I0 (~ck40buf),.I1 (gbe_txclk2_buf), .S(sel_rdclk));
+
+   assign rd_addr = (sel_rdclk)? tx_adr[10:2] : rd_ptr[8:0];
 
 
     genvar v;
     generate
-       for (v=12'hb00; v<=BRAM_LIM; v=v+1'b1) begin:bramgen
+       for (v=12'h000; v<=BRAM_LIM; v=v+1'b1) begin:bramgen
            RAMB36E1 #(
 	.DOA_REG(0),         // Optional output register (0 or 1)
 	.DOB_REG(0),         // Optional output register (0 or 1)
@@ -1559,19 +1444,19 @@ module CSC_GEM_Emulator(
             )
     block_ram_ecc
         (
-         .ADDRARDADDR ({1'b1, tx_adr[10:2], 6'h3f}),  // 16 bit RDADDR, but only 14:6 are used w/ECC.  1/3f?
+         .ADDRARDADDR ({1'b1, rd_addr[8:0], 6'h3f}),  // 16 bit RDADDR, but only 14:6 are used w/ECC.  1/3f?
          .DIADI   (data_iram[31:0]),  // DI low 32-bit
          .DIBDI   (data_iram[63:32]), // DI high 32-bit
          .DOADO   (data_oram[v][31:0]),   // DO low 32-bit
          .DOBDO   (data_oram[v][63:32]),  // DO high 32-bit
          .WEA     (4'h0),      // WEA, NA for SDP
-         .ENARDEN ((cmd_code == 16'hf3f3) & (bk_adr == v) & gtx_ready),  // RDEN
+         .ENARDEN (send_event || ((cmd_code == 16'hf3f3) & (bk_adr == v) & gtx_ready)),  // RDEN
          .REGCEAREGCE (1'b0),  // REGCE, NA if DO_REG=0
          .RSTRAMARSTRAM(1'b0),
          .RSTRAMB(1'b0),       // NA if SDP
          .RSTREGARSTREG(1'b0), // NA if SDP or DO_REG=0
          .RSTREGB(1'b0),       // NA if SDP or DO_REG=0
-         .CLKARDCLK   (gbe_txclk2), //  RDCLK
+         .CLKARDCLK   (rdclk), //  RDCLK
 // not valid if DO_REG=0:  REGCEAREGCE, REGCEB, RSTREGARSTREG, RSTREGB
 // not used for SDP:  CASCADE*, REGCEB, RSTRAMB, RSTREGARSTREG, RSTREGB, WEA
          .ADDRBWRADDR ({1'b1, rx_adr_r[10:2], 6'h3f}), // 16 bit WRADDR, but only 14:6 are used w/ECC.  1/3f?
@@ -1624,6 +1509,8 @@ module CSC_GEM_Emulator(
 	end
      end
 
+   reg   event_done_r = 0, dump_done_r = 0, dump_loop = 0;
+   reg [7:0]  nbx_i=0, nbx=0;
    always @(posedge gbe_txclk2 or posedge gtx_reset) // everything using GbE USR clock w/GTX_Reset
      begin
 	if (gtx_reset) begin
@@ -1663,14 +1550,40 @@ module CSC_GEM_Emulator(
 	   rx_timeout <= 1'b0;
 	   data_bram <= 16'hd1d0;
 	   data_bram_r <= 16'he4e2;
+	   sel_rdclk=1'b0;
+	   event_done_r <= 0;
+	   dump_done_r <= 0;
+	   dump_loop_i <= 0;
+	   dump_loop <= 0;
+	   nbx_i <= 0;
+	   nbx <= 0;
 	end
 
 	else begin // Not Reset case
+	   event_done_r <= event_done;
+	   dump_done_r  <= dump_done;
 	   rx_resetdone_r2 <= rx_resetdone_r;
 	   rx_resetdone_r3 <= rx_resetdone_r2;
 	   if (rx_resetdone_r3) comma_align <= 1; // maybe use time_r > 8'h10 ?
 
 	   crc_rst <= (data_state == 2'h2)? 1'b1 : 1'b0;  // needs one cycle during state 3
+
+
+	   if (dump_done_r) dump_loop <= 0;
+	   else dump_loop <= dump_loop_i; // sets FPGA for continuous loop of sending all patterns
+	   if (event_done_r) nbx <= 0;
+	   else nbx <= nbx_i;  // tells how many BX to send for this event (8 bits)
+
+	   if (cmd_code == 16'hFDFD) dump_enable <= !dump_done_r;  // dump_done is driven by ck40   ... was 1'b1;
+	   else if (cmd_code[15:12] == 4'hF) dump_enable <= 1'b0;  // stop dump on any non-FDFD command: F0F0, F3F3, F7F7, FEFE...
+	   else dump_enable <= dump_enable;
+
+	   if (cmd_code == 16'hFEFE) event_enable <= !event_done_r;  // event_done is driven by ck40
+	   else if (cmd_code[15:12] == 4'hF) event_enable <= 1'b0;   // stop dump on any non-FEFE command: F0F0, F3F3, F7F7, FDFD...
+	   else event_enable <= event_enable;
+
+	   if (cmd_code == 16'hF3F3) sel_rdclk <= 1'b1;
+	   else sel_rdclk <= 1'b0;  // JGhere, maybe this will change the clock before the Read is finished, so delay it?
 
 	   if (cmd_code == 16'hf3f3) begin  // load counter2 to READ registers and send it out
 	      pkt_lim <= 16'd2061;   // 16'd61 special test size 100 bytes.  later will be 4 KB
@@ -1681,7 +1594,7 @@ module CSC_GEM_Emulator(
 	   byte_count <= 16'hffff&((pkt_lim*2) - 16'd22); // Need BYTES; subtract preamble bytes etc.
 
   // select what goes on the BRAM bus
-	   if ((bk_adr < 12'hb00) || (bk_adr > BRAM_LIM)) data_bram <= 16'hba0f; // limited range of bk_adr space
+	   if ((bk_adr < 12'h000) || (bk_adr > BRAM_LIM)) data_bram <= 16'h0a0f; // limited range of bk_adr space
 	   else if (cmd_code == 16'hf3f3) begin
 	      case (tx_adr[1:0])
 		2'b00: data_bram <= data_oram[bk_adr][63:48];
@@ -1695,14 +1608,14 @@ module CSC_GEM_Emulator(
 	   data_bram_r  <= data_bram;
 
 	   if (data_state[1]) begin  // end of sent data packet
-	      cmd_code <= 16'h0000;
+//	      cmd_code <= 16'h0000;
+	      if(|cmd_code) cmd_code <= 16'h0000;
 	      bk_adr <= 12'h000;
 	      pkt_send <= 1'b0;
 	      counter <= 0;
 	      if (data_state == 2'h2) pkt_id <= pkt_id + 1'b1;
 	   end
 	   else if (rx_timeout) begin
-	      cmd_code <= 16'h0000;
 	      bk_adr <= 12'h000;
 	      counter <= 0;
 	      pkt_send <= 1'b0;
@@ -1713,6 +1626,7 @@ module CSC_GEM_Emulator(
  	   else if (!sync_state[0] && time_r[7] && (cmd_code > 16'h0000)) pkt_send <= 1'b1;
 //	   else if (!rxdv && loop_command && (cmd_code == 16'h0000) ) cmd_code <= 16'hf4f4;
 
+// JGhere, Build GbE packet for Tx to PC:
 	   if ((counter > 0) && (counter <= pkt_lim)) begin  // put data on gbe_txdat after preamble, MACaddr's & Length
 	      counter_send <= 1;
 	      if (counter == 16'd1) begin
@@ -1756,20 +1670,7 @@ module CSC_GEM_Emulator(
 		 if(cmd_code[1]^cmd_code[0]) begin  // generalized for f1f1 or f2f2 ( == !f3f3 && !f4f4) or f5 or f6...f9, fa, fd, fe
 		    gbe_txdat <= 16'ha1a1;
 		 end
-/*  JRG, not needed for CSC_GEM...
-		    if (cmd_code == 16'hf1f1 && ireg < 8) begin  //  "en_snapshift" signal for the Snap12s
-		       if (counter[0]) gbe_txdat <= snap_errcount[ireg][15:0]; // 8 32-bit wide elements in this array
-		       else gbe_txdat <= snap_errcount[ireg][31:16];
-		    end
-		    else if (cmd_code == 16'hf2f2 && ireg < 24) gbe_txdat <= count_lvlshft[ireg]; // 24 16-bit wide elements in this array
-// added 3 csr vote_errcnts here, # of trials (clk counter w/en_csr & reset).  vote_a_err, vote_b_err, tri_vote_err
-		    else if (cmd_code == 16'hf5f5 && ireg < 12) begin
-		       if (counter[0]) gbe_txdat <= vote_errcnt[ireg][15:0]; // 12 32-bit wide elements in this array
-		       else gbe_txdat <= vote_errcnt[ireg][31:16];
-		    end
-		    else gbe_txdat <= 16'ha1a1; // ireg out of range or CMD=f5, f6, f9, fa, fd, fe
-		 end
-*/
+
 		 else if (cmd_code[2]) begin  // Function4 is active, or f7 or fc, ff.  send cmd_code first.
 		    if (counter < 16'd14) gbe_txdat <= {4'hd,bk_adr[11:0]};    //  <-- 2nd word returns the bk_adr
 		    else gbe_txdat <= {pkt_id[4:0],rx_adr[10:0]};  // send the sequential packet ID for each packet, plus 11 bit sub-address
@@ -1818,7 +1719,7 @@ module CSC_GEM_Emulator(
 	   ll_gbe_rxdat <= l_gbe_rxdat;
 	   l_gbe_rxdat <= gbe_rxdat;
 
-	   if (time_r[7] && rxdv && (sw[7] || !sw[8]) ) begin // get command from first 1-2 data bytes of packet
+	   if (time_r[7] && rxdv) begin // get command from first 1-2 data bytes of packet
 	      if (gbe_rxcount == 16'd4407) begin  // tuned to handle weird .5 sec rxdv case after Reset.
 	         ovfl_packet <= ovfl_packet + 1'b1; // tracks when a rx packet times-out, over jumbo GbE limit
 	         rx_timeout <= 1'b1;  // only set for pretty big jumbo packet, over 8810 bytes
@@ -1829,12 +1730,19 @@ module CSC_GEM_Emulator(
 	      else if (cycle4) rx_adr_r <= rx_adr;
 
 	      if (rx_timeout) begin
-		 tx_adr <= 0;
 		 rx_adr <= 0;
+		 tx_adr <= 0;
+	      end
+
+// JGhere, Break down GbE packet Rx from the PC:
+	      if ( rx_timeout | event_done_r | dump_done_r ) begin
+		 cmd_code <= 16'h0000;
+		 dump_loop_i <= 0;
+		 nbx_i <= 0;
 		 cycle4 <= 0;
 		 cmd_f7f7 <= 0;
 	      end
-	      else if ( (gbe_rxcount == 16'h0003) && (cmd_code == 16'h0000) && (sw[7] || !sw[8]) ) begin
+	      else if ( (gbe_rxcount == 16'h0003) && (cmd_code == 16'h0000)  ) begin
 		 if ( (gbe_rxdat&16'hf0f0)==16'hf0f0 && (gbe_rxdat&16'h0f0f)!=16'h0f0f ) begin
 		    cmd_code <= gbe_rxdat; //   ^^^ make sure cmd code looks valid ^^^
 		    good_rx_cmd <= 1'b1;
@@ -1843,16 +1751,18 @@ module CSC_GEM_Emulator(
 		    cmd_f7f7 <= 0;
 		 end
 	      end
-	      else if (gbe_rxcount == 16'h0004 && (cmd_code == 16'hf3f3 || cmd_code == 16'hf7f7) ) begin
-	        //     **> hex b00 = 2816 dec.   hex c00 = 3072 dec.
-		 if (gbe_rxdat[11:8] == 4'hb) bk_adr <= gbe_rxdat[11:0]; // test gbe_rxdat for 'b'
+	      else if ( |cmd_code && (gbe_rxcount == 16'h0004)) begin
+		 if (cmd_code == 16'hFDFD) dump_loop_i <= (gbe_rxdat[3:0]==4'hC);
+		 else dump_loop_i <= 0;
+		 if (cmd_code == 16'hFEFE) nbx_i <= (gbe_rxdat[7:0]);
+		 else nbx_i <= 0;
+		 if ( (cmd_code == 16'hf3f3 || cmd_code == 16'hf7f7) && (gbe_rxdat[11:8] == 4'h0) ) bk_adr <= gbe_rxdat[11:0];
 		 else bk_adr <= 0;
 		 data_iram[15:0] <= 16'hdddd;
 	      end
 	      else if (gbe_rxcount > 16'h0004 && (cmd_code == 16'hf7f7) && (bk_adr != 12'h000) ) begin
 		 if (gbe_rxcount == 16'h0005) cmd_f7f7 <= (cmd_code == 16'hf7f7);
-
-		 cycle4 <= (cmd_f7f7 & (rx_adr[1:0] == 2'h3));
+		 cycle4 <= (cmd_f7f7 & (rx_adr[1:0] == 2'h3)); // cannot begin before rx_count=6
 		 if (rx_adr != 11'h7ff) rx_adr <= rx_adr + 1'b1;
 		 else cmd_f7f7 <= 0;
 
@@ -1969,12 +1879,10 @@ GBE_T20R20 gbe_gtx (
 */
    always @(*)
      begin   // JG, v1p16: swap LED 3<>4, notes and all
-        /* delete??
 	led_low[0] = !_ccb_rx[22]; // ccb_ttcrx_rdy, always OFF
 	led_low[1] = !_ccb_rx[23]; // ccb_qpll_lck, OFF but often blinks ON (very short)
 	led_low[2] = qpll_lock;    // always ON!   was !_ccb_rx[31] == _alct_adb_pulse_async
 	led_low[3] = qpll_lock_lost; // always OFF?  was _ccb_rx[35] == mpc_in1, always ON
-         */ 
 	led_low[4] = lhc_clk;
 //	led_low[5] = !_ccb_rx[12];   // L1accept
 //	led_low[6] = trigger;      // OR of several trigger pulse inputs
@@ -1993,7 +1901,7 @@ GBE_T20R20 gbe_gtx (
 	      led_hi[11] = !reset;    // M1: HI
 	      led_hi[12] = lhc_clk;   // M1: Good!
 	      led_hi[13] = (locked & lhc_locked); // M1: 
-	      led_hi[14] = slwclk;//Not use? Tao??
+	      led_hi[14] = slwclk;
 	      led_hi[15] = !ck160_locklost;   // M1: 
 	      //test_led[6:5] = 0;//
 /*
@@ -2006,14 +1914,12 @@ GBE_T20R20 gbe_gtx (
 */
 	      //test_led[7] = reset;   // 
 	      //test_led[8] = bc0_led; // 
- 	      test_led[9] = bc0;     //not use anymore?? Tao?? 
-	      test_led[10]  = bc0_r3; //the same as above
+ 	      test_led[9] = bc0;     // 
+	      test_led[10]  = bc0_r3; // 
 //	      led_low = 0;
 	   end
 // tx_begin (!sw7), tx_fc, rx_strt, rx_valid, rx_match
 
-// JGhere, add 7 signals to 0,0 case: ccb_cmdstrb & lhc_clk & ccb_cmd[0], tmb_cfg_out, alct_cfg_out, ccb_datstrb & ccb_data[0]?
-//                                    
 	   else begin            // Both OFF: send comp_dout when non-zero; PB is Reset  (good to use at OSU)
 	      led_hi[12:8] = ~gempad_r[4:0];
 	      led_hi[13] = locked;    // M1: HI
@@ -2092,9 +1998,10 @@ GBE_T20R20 gbe_gtx (
 
    SRL16E #(.INIT(16'h0FFF)) SRL16MMCM(.Q(ck160_rst), .A0(1'b1), .A1(1'b1), .A2(1'b1), .A3(1'b1), .CE (ck160_locked), .CLK(qpll_ck40), .D(1'b0));
 
-// JGhere, snap12 GTX clock section, only need one?  6 of the 7 fibers have dummies for TRG_TxOutCLK.
-//     mmcm from 80 MHz:         In,    out80,  out160,   out40,   reset,       locked
-   bufg_x2div2 snap_mmcm (tx_clk_out, tx_clk, snap_clk2, ck40, !ck160_locked, lock40); // from Tx GTX PLL out clk
+//     mmcm from 80 MHz:               In,    out80,  out160,   out40,   reset,       locked
+//   bufg_x2div2 snap_mmcm (tx_clk_out, tx_clk, snap_clk2, ck40, !ck160_locked, lock40); // from Tx GTX PLL out clk
+//     mmcm from 80 MHz:                 In,    out80,  out160,   out40,   reset,       locked,   out40-no-bufg
+   bufg_x2div2plus snap_mmcm (tx_clk_out, tx_clk, snap_clk2, ck40, !ck160_locked, lock40, ck40buf); // from Tx GTX PLL out clk
 
 // JGhere, fiber Tx "from DCFEB" section:
 //   was Snap12 module, not cfeb-tmb test code
@@ -2106,12 +2013,12 @@ GBE_T20R20 gbe_gtx (
 	.TRG_TDIS (),   // OBUF output, for what?  N/A?
 	.TRG_TX_N (txn[0]),   // pick a fiber
 	.TRG_TX_P (txp[0]),   // pick a fiber
-	.G1C (8'b0),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-	.G2C (8'b0),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
-	.G3C (8'b0), //   but good for testing low-rate non-zero triad data:
-	.G4C (8'b0),
-	.G5C (8'b0),
-	.G6C (8'b0),
+	.G1C (data_oram[0][7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+	.G2C (data_oram[0][15:8]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
+	.G3C (data_oram[0][23:16]), //   but good for testing low-rate non-zero triad data:
+	.G4C (data_oram[0][31:24]),
+	.G5C (data_oram[0][39:32]),
+	.G6C (data_oram[0][47:40]),
 	.TRG_TX_REFCLK (ck160),  // QPLL 160 from MGT clk
 	.TRG_TXUSRCLK (snap_clk2),  // get 160 from TXOUTCLK (times 2)
 	.TRG_CLK80 (tx_clk),     // get 80 from TXOUTCLK
@@ -2132,7 +2039,11 @@ GBE_T20R20 gbe_gtx (
 	.MON_TRG_TX_DATA ()  //  N/A returns 32 bits
 	);
 
-
+/*
+         data_oram[v][31:0]     // DO low 32-bit
+         data_oram[v][63:32]  // DO high 32-bit 
+ */
+   
    tmb_fiber_out  dcfeb1out (
 	.RST (reset),   // Manual only
 	.TRG_SIGDET (), // from IPAD to IBUF.  N/A?
@@ -2141,12 +2052,12 @@ GBE_T20R20 gbe_gtx (
 	.TRG_TDIS (),   // OBUF output, for what?  N/A?
 	.TRG_TX_N (txn[1]),   // pick a fiber
 	.TRG_TX_P (txp[1]),   // pick a fiber
-	.G1C (8'b0),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-	.G2C (8'b0),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
-	.G3C (8'b0), //   but good for testing low-rate non-zero triad data:
-	.G4C (8'b0),
-	.G5C (8'b0),
-	.G6C (8'b0),
+	.G1C (data_oram[1][7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+	.G2C (data_oram[1][15:8]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
+	.G3C (data_oram[1][23:16]), //   but good for testing low-rate non-zero triad data:
+	.G4C (data_oram[1][31:24]),
+	.G5C (data_oram[1][39:32]),
+	.G6C (data_oram[1][47:40]),
 	.TRG_TX_REFCLK (ck160),  // QPLL 160 from MGT clk
 	.TRG_TXUSRCLK (snap_clk2),  // get 160 from TXOUTCLK (times 2)
 	.TRG_CLK80 (tx_clk),     // get 80 from TXOUTCLK
@@ -2175,18 +2086,12 @@ GBE_T20R20 gbe_gtx (
 	.TRG_TDIS (),   // OBUF output, for what?  N/A?
 	.TRG_TX_N (txn[2]),   // pick a fiber
 	.TRG_TX_P (txp[2]),   // pick a fiber
-//	.G1C (8'b0),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-//	.G2C (8'b0),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
-//	.G3C (8'b0), //   but good for testing low-rate non-zero triad data:
-//	.G4C (8'b0),
-//	.G5C (8'b0),
-//	.G6C (8'b0),
-	.G1C (triad_word_l1[7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-	.G2C (triad_word_l2[7:0]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
-	.G3C (triad_word_l3[7:0]), //   but good for testing low-rate non-zero triad data:
-	.G4C (triad_word_l4[7:0]),
-	.G5C (triad_word_l5[7:0]),
-	.G6C (triad_word_l6[7:0]),
+	.G1C (data_oram[2][7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+	.G2C (data_oram[2][15:8]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
+	.G3C (data_oram[2][23:16]), //   but good for testing low-rate non-zero triad data:
+	.G4C (data_oram[2][31:24]),
+	.G5C (data_oram[2][39:32]),
+	.G6C (data_oram[2][47:40]),
 	.TRG_TX_REFCLK (ck160),  // QPLL 160 from MGT clk
 	.TRG_TXUSRCLK (snap_clk2),  // get 160 from TXOUTCLK (times 2)
 	.TRG_CLK80 (tx_clk),     // get 80 from TXOUTCLK
@@ -2215,12 +2120,12 @@ GBE_T20R20 gbe_gtx (
 	.TRG_TDIS (),   // OBUF output, for what?  N/A?
 	.TRG_TX_N (txn[3]),   // pick a fiber
 	.TRG_TX_P (txp[3]),   // pick a fiber
-	.G1C (8'b0),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-	.G2C (8'b0),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
-	.G3C (8'b0), //   but good for testing low-rate non-zero triad data:
-	.G4C (8'b0),
-	.G5C (8'b0),
-	.G6C (8'b0),
+	.G1C (data_oram[3][7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+	.G2C (data_oram[3][15:8]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
+	.G3C (data_oram[3][23:16]), //   but good for testing low-rate non-zero triad data:
+	.G4C (data_oram[3][31:24]),
+	.G5C (data_oram[3][39:32]),
+	.G6C (data_oram[3][47:40]),
 	.TRG_TX_REFCLK (ck160),  // QPLL 160 from MGT clk
 	.TRG_TXUSRCLK (snap_clk2),  // get 160 from TXOUTCLK (times 2)
 	.TRG_CLK80 (tx_clk),     // get 80 from TXOUTCLK
@@ -2249,18 +2154,12 @@ GBE_T20R20 gbe_gtx (
 	.TRG_TDIS (),   // OBUF output, for what?  N/A?
 	.TRG_TX_N (txn[4]),   // pick a fiber
 	.TRG_TX_P (txp[4]),   // pick a fiber
-//	.G1C (triad_word_l1[7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-//	.G2C (triad_word_l2[7:0]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
-//	.G3C (triad_word_l3[7:0]), //   but good for testing low-rate non-zero triad data:
-//	.G4C (triad_word_l4[7:0]),
-//	.G5C (triad_word_l5[7:0]),
-//	.G6C (triad_word_l6[7:0]),
-	.G1C (8'b0),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-	.G2C (8'b0),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
-	.G3C (8'b0), //   but good for testing low-rate non-zero triad data:
-	.G4C (8'b0),
-	.G5C (8'b0),
-	.G6C (8'b0),
+	.G1C (data_oram[4][7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+	.G2C (data_oram[4][15:8]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
+	.G3C (data_oram[4][23:16]), //   but good for testing low-rate non-zero triad data:
+	.G4C (data_oram[4][31:24]),
+	.G5C (data_oram[4][39:32]),
+	.G6C (data_oram[4][47:40]),
 	.TRG_TX_REFCLK (ck160),  // QPLL 160 from MGT clk
 	.TRG_TXUSRCLK (snap_clk2),  // get 160 from TXOUTCLK (times 2)
 	.TRG_CLK80 (tx_clk),     // get 80 from TXOUTCLK
@@ -2289,12 +2188,12 @@ GBE_T20R20 gbe_gtx (
 	.TRG_TDIS (),   // OBUF output, for what?  N/A?
 	.TRG_TX_N (txn[5]),   // pick a fiber
 	.TRG_TX_P (txp[5]),   // pick a fiber
-	.G1C (8'b0),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-	.G2C (8'b0),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
-	.G3C (8'b0), //   but good for testing low-rate non-zero triad data:
-	.G4C (8'b0),
-	.G5C (8'b0),
-	.G6C (8'b0),
+	.G1C (data_oram[5][7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+	.G2C (data_oram[5][15:8]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
+	.G3C (data_oram[5][23:16]), //   but good for testing low-rate non-zero triad data:
+	.G4C (data_oram[5][31:24]),
+	.G5C (data_oram[5][39:32]),
+	.G6C (data_oram[5][47:40]),
 	.TRG_TX_REFCLK (ck160),  // QPLL 160 from MGT clk
 	.TRG_TXUSRCLK (snap_clk2),  // get 160 from TXOUTCLK (times 2)
 	.TRG_CLK80 (tx_clk),     // get 80 from TXOUTCLK
@@ -2323,12 +2222,12 @@ GBE_T20R20 gbe_gtx (
 	.TRG_TDIS (),   // OBUF output, for what?  N/A?
 	.TRG_TX_N (txn[6]),   // pick a fiber
 	.TRG_TX_P (txp[6]),   // pick a fiber
-	.G1C (8'b0),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-	.G2C (8'b0),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
-	.G3C (8'b0), //   but good for testing low-rate non-zero triad data:
-	.G4C (8'b0),
-	.G5C (8'b0),
-	.G6C (8'b0),
+	.G1C (data_oram[6][7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+	.G2C (data_oram[6][15:8]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
+	.G3C (data_oram[6][23:16]), //   but good for testing low-rate non-zero triad data:
+	.G4C (data_oram[6][31:24]),
+	.G5C (data_oram[6][39:32]),
+	.G6C (data_oram[6][47:40]),
 	.TRG_TX_REFCLK (ck160),  // QPLL 160 from MGT clk
 	.TRG_TXUSRCLK (snap_clk2),  // get 160 from TXOUTCLK (times 2)
 	.TRG_CLK80 (tx_clk),     // get 80 from TXOUTCLK
@@ -2357,12 +2256,12 @@ GBE_T20R20 gbe_gtx (
 	.TRG_TDIS (),   // OBUF output, for what?  N/A?
 	.TRG_TX_N (txn[7]),   // pick a fiber
 	.TRG_TX_P (txp[7]),   // pick a fiber
-	.G1C (8'b0),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-	.G2C (8'b0),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
-	.G3C (8'b0), //   but good for testing low-rate non-zero triad data:
-	.G4C (8'b0),
-	.G5C (8'b0),
-	.G6C (8'b0),
+	.G1C (data_oram[7][7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+	.G2C (data_oram[7][15:8]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
+	.G3C (data_oram[7][23:16]), //   but good for testing low-rate non-zero triad data:
+	.G4C (data_oram[7][31:24]),
+	.G5C (data_oram[7][39:32]),
+	.G6C (data_oram[7][47:40]),
 	.TRG_TX_REFCLK (ck160),  // QPLL 160 from MGT clk
 	.TRG_TXUSRCLK (snap_clk2),  // get 160 from TXOUTCLK (times 2)
 	.TRG_CLK80 (tx_clk),     // get 80 from TXOUTCLK
