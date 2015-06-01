@@ -1,0 +1,440 @@
+NET "led_hi[10]" LOC = N24;
+NET "led_hi[11]" LOC = N23;
+NET "led_hi[12]" LOC = F23;
+NET "led_hi[13]" LOC = F24;
+NET "led_hi[14]" LOC = L24;
+NET "led_hi[15]" LOC = M23;
+NET "led_hi[8]" LOC = G23;
+NET "led_hi[9]" LOC = H23;
+#NET "led_low[0]" LOC = AF24;
+#NET "led_low[1]" LOC = AF25;
+#NET "led_low[2]" LOC = W24;
+#NET "led_low[3]" LOC = V24;
+#NET "led_low[4]" LOC = H24;
+#NET "led_low[5]" LOC = H25;
+#NET "led_low[6]" LOC = P24;
+#NET "led_low[7]" LOC = R24;
+#NET "rst_qpll"   LOC = U30;
+#NET "qpll_lock"  LOC = M22;
+NET "tmb_clock0" LOC = B31; # LHC_Clk  io_600
+# NET "tmb_clock1" LOC = K24; # GCLK1_6P
+#NET "fcs" LOC = Y24; # drive FCS HIGH for compatibility with Mezz 2012.
+
+NET "pb" LOC = V29;
+NET "pb" CLOCK_DEDICATED_ROUTE = FALSE;
+NET "sw[7]" LOC = U25;
+NET "sw[7]" CLOCK_DEDICATED_ROUTE = FALSE;
+NET "sw[8]" LOC = U26;
+NET "sw[8]" CLOCK_DEDICATED_ROUTE = FALSE;
+
+# make sure critical VME signals keep the bus in a safe state
+#NET "vme_cmd10"    LOC = AK24;  # IACKIN
+#NET "vme_reply[0]" LOC = AF20; #  io_[110] OE_b, low true
+#NET "vme_reply[1]" LOC = AE21; #  io_[111] DIR
+#NET "vme_reply[2]" LOC = AF19; #  io_[112] DTACK, inverted on TMB board
+#NET "vme_reply[3]" LOC = AL20; #  io_[113] IACKOUT, inverted on TMB board?
+#NET "vme_reply[4]" LOC = AD20; #  io_[114] BERR, inverted on TMB board
+#NET "vme_reply[5]" LOC = AD19; #  io_[115] IRQ, inverted on TMB board
+#NET "vme_reply[6]" LOC = AE19; #  io_[116] vme_ready, High enables 0-5 above?
+
+# make sure all directional backplane buffers are in a safe state:
+#   /gtl_oe=0 (normal mode), gtl_loop=0, dmb_loop=0, rpc_loop=0, ccb_status_oe=1, /dmb_oe=0
+# NET "_gtl_oe" LOC = F21; #  io_[311]  float it for Mezz 2012 compatibility
+#NET "gtl_loop" LOC = G21; #  io_[309]
+#NET "dmb_loop" LOC = J22; #  io_[308]
+#NET "rpc_loop" LOC = J21; #  io_[306]
+#NET "ccb_status_oe" LOC = G20; #  io_[310]
+#NET "_dmb_oe" LOC = K22; #  io_[307]
+#NET "step[4]" LOC = C18; #  io_[297]
+#NET "step[3]" LOC = L20; #  io_[298]
+#NET "step[2]" LOC = D19; #  io_[299]
+#NET "step[1]" LOC = J20; #  io_[300]
+#NET "step[0]" LOC = H20; #  io_[301]
+
+# other critical control pins
+#NET "_hard_reset_alct_fpga" LOC = AC20; #  io_[124]  --_alct_hard_rst
+#NET "_hard_reset_tmb_fpga" LOC = AC19; #  io_[125]  --_tmb_hard_rst
+
+#NET "_ccb_tx[26]" LOC = AF23; #  io_[1]  was AG23 for Mezz 2010
+#NET "_ccb_tx[25]" LOC = AD31; #  io_[500]
+#NET "_ccb_tx[24]" LOC = AD30; #  io_[499]
+#NET "_ccb_tx[23]" LOC = AC28; #  io_[498]
+#NET "_ccb_tx[22]" LOC = AE24; #  io_[497]
+#NET "_ccb_tx[21]" LOC = AB30; #  io_[496]
+#NET "_ccb_tx[20]" LOC = AB25; #  io_[495]
+#NET "_ccb_tx[19]" LOC = AB26; #  io_[494] alct_cfg_done
+#NET "_ccb_tx[18]" LOC = AB31; #  io_[493] tmb_cfg_done
+# alct/clct_status bus output to CCB-FP (common to all TMBs)
+#NET "_ccb_tx[17]" LOC = AE28; #  io_[19] alct_status8
+#NET "_ccb_tx[16]" LOC = AF28; #  io_[18]
+#NET "_ccb_tx[15]" LOC = AD22; #  io_[17]
+#NET "_ccb_tx[14]" LOC = AA24; #  io_[16]  was AA23 for Mezz 2010
+#NET "_ccb_tx[13]" LOC = AC27; #  io_[15]
+#NET "_ccb_tx[12]" LOC = AD29; #  io_[14]
+#NET "_ccb_tx[11]" LOC = AB23; #  io_[13]
+#NET "_ccb_tx[10]" LOC = AC30; #  io_[12]
+#NET "_ccb_tx[9]" LOC = AC29; #  io_[11] alct_status0
+#NET "_ccb_tx[8]" LOC = AF30; #  io_[10] clct_status8
+#NET "_ccb_tx[7]" LOC = AC22; #  io_[9]
+#NET "_ccb_tx[6]" LOC = AD24; #  io_[8]
+#NET "_ccb_tx[5]" LOC = AG30;  #  io_[7]
+#NET "_ccb_tx[4]" LOC = AF29;  #  io_[6]
+#NET "_ccb_tx[3]" LOC = AC23; #  io_[5]
+#NET "_ccb_tx[2]" LOC = AE31;  #  io_[4]
+#NET "_ccb_tx[1]" LOC = AF31;  #  io_[3]
+#NET "_ccb_tx[0]" LOC = AE29;  #  io_[2] clct_status0
+
+# signals from CCB 
+#NET "_ccb_rx[0]" LOC = AG28; # io36, clk40en, really a clock itself
+# NET "_ccb_rx<0>" CLOCK_DEDICATED_ROUTE = FALSE;  # to avoid BUFG error
+#NET "_ccb_rx[1]" LOC = AM32;  # L1reset
+#NET "_ccb_rx[2]" LOC = AN32; #
+#NET "_ccb_rx[3]" LOC = AG27; #
+#NET "_ccb_rx[4]" LOC = AC25; #
+#NET "_ccb_rx[5]" LOC = AD27; #
+#NET "_ccb_rx[6]" LOC = AP32; #
+#NET "_ccb_rx[7]" LOC = AM31; #
+#NET "_ccb_rx[8]" LOC = AP30;  # ccb_evcntres
+#NET "_ccb_rx[9]" LOC = AF26;  # ccb_bcntres
+#NET "_ccb_rx[10]" LOC = AE27; # ccb_cmdstrobe
+#NET "_ccb_rx[11]" LOC = AD25; # ccb_bx0
+#NET "_ccb_rx[12]" LOC = AD26; # L1accept
+#NET "_ccb_rx[13]" LOC = AE26; #
+#NET "_ccb_rx[14]" LOC = AM30; #
+#NET "_ccb_rx[15]" LOC = AP29; #
+#NET "_ccb_rx[16]" LOC = AM28; #
+#NET "_ccb_rx[17]" LOC = AK31; #
+#NET "_ccb_rx[18]" LOC = AB28; #
+#NET "_ccb_rx[19]" LOC = AH30; #
+#NET "_ccb_rx[20]" LOC = AK33; #
+#NET "_ccb_rx[21]" LOC = AK34; #
+#NET "_ccb_rx[22]" LOC = AL33; # 
+#NET "_ccb_rx[23]" LOC = AL31; #
+#NET "_ccb_rx[24]" LOC = AL30; #
+#NET "_ccb_rx[25]" LOC = AK32; #
+#NET "_ccb_rx[26]" LOC = AL34; #
+#NET "_ccb_rx[27]" LOC = AJ30; #
+#NET "_ccb_rx[28]" LOC = AJ29; #
+#NET "_ccb_rx[29]" LOC = AH29; #
+#NET "_ccb_rx[30]" LOC = AM33; #
+#NET "_ccb_rx[31]" LOC = AN34; #
+#NET "_ccb_rx[32]" LOC = AN33; #
+#NET "_ccb_rx[33]" LOC = AP33; #
+#NET "_ccb_rx[34]" LOC = AA26; #
+#NET "_ccb_rx[35]" LOC = AB27; #
+#NET "_ccb_rx[36]" LOC = AA28; #
+#NET "_ccb_rx[37]" LOC = Y27;  #
+#NET "_ccb_rx[38]" LOC = AA29; #
+#NET "_ccb_rx[39]" LOC = AG32; # dmb_cfebcalib0
+#NET "_ccb_rx[40]" LOC = AA30; # dmb_cfebcalib1
+#NET "_ccb_rx[41]" LOC = Y29;  # dmb_cfebcalib2
+#NET "_ccb_rx[42]" LOC = Y26;  # io482, dmb_l1a_release
+#NET "_ccb_rx[43]" LOC = AG31; # io483, dmb_reservedout0
+#NET "_ccb_rx[44]" LOC = AH34; # io484, dmb_reservedout1
+#NET "_ccb_rx[45]" LOC = AJ34; # io485, dmb_reservedout2
+#NET "_ccb_rx[46]" LOC = AA31; # io486, dmb_reservedout3
+#NET "_ccb_rx[47]" LOC = Y28;  # io487, dmb_reservedout4
+#NET "_ccb_rx[48]" LOC = AH33; # io488, dmb_reservedin0
+#NET "_ccb_rx[49]" LOC = AA25; # io489, dmb_reservedin1
+#NET "_ccb_rx[50]" LOC = AH32; # io490, dmb_reservedin2
+
+NET "gempad_in[1]" LOC = T29;
+NET "gempad_in[2]" LOC = R31;
+NET "gempad_in[3]" LOC = T26;
+NET "gempad_in[4]" LOC = R29;
+NET "gempad_in[5]" LOC = R27;
+NET "gempad_in[6]" LOC = T30;
+NET "gempad_in[7]" LOC = U28;
+NET "gempad_in[8]" LOC = T28;
+NET "test_led[9]" LOC = T25;
+NET "test_led[10]" LOC = U27;
+# should try LV_DCI standard sometime...
+
+NET "ck125n" LOC = H9 | IOSTANDARD = "LVDS_25";  // 2.5V IO is Xilinx-V6 default anyway
+NET "ck125p" LOC = J9 | IOSTANDARD = "LVDS_25";
+NET "ck125" TNM_NET = "clock125";
+TIMESPEC "TS_clock125" = PERIOD "clock125" 8 ns HIGH 50%;
+# NET "ck125p" period=8ns high 50%;
+
+NET "ck160n" LOC = AB5 | IOSTANDARD = "LVDS_25";
+NET "ck160p" LOC = AB6 | IOSTANDARD = "LVDS_25";
+# NET "ck160" TNM_NET = "clock160";
+NET "snap_clk2" TNM_NET = "clock160";
+TIMESPEC "TS_clock160" = PERIOD "clock160" 6.25 ns HIGH 50%;
+
+NET "lhc_ckn" LOC = B10 | IOSTANDARD = "LVDS_25";  # this is differential 40 MHz from QPLL
+NET "lhc_ckp" LOC = A10 | IOSTANDARD = "LVDS_25";
+NET "qpll_ck40" TNM_NET = "qpllck40";
+TIMESPEC "TS_qpllck40" = PERIOD "qpllck40" 25 ns HIGH 50%;
+
+NET "lhc_ck" TNM_NET = "lhc_clock";  # this is from tmb_clock0
+TIMESPEC "TS_lhc_clock" = PERIOD "lhc_clock" 25 ns HIGH 50%;
+
+# location for snap fiber0 mgt: GTX3/?
+NET "txn[0]" LOC = AK2 | IOSTANDARD = "LVDS_25";
+NET "txp[0]" LOC = AK1 | IOSTANDARD = "LVDS_25";
+#NET "rxn[0]" LOC = AP6 | IOSTANDARD = "LVDS_25";
+#NET "rxp[0]" LOC = AP5 | IOSTANDARD = "LVDS_25";
+
+# location for snap fiber1 mgt: gtx4/rx1
+NET "txn[1]" LOC = AH2 | IOSTANDARD = "LVDS_25";
+NET "txp[1]" LOC = AH1 | IOSTANDARD = "LVDS_25";
+#NET "rxn[1]" LOC = AM6 | IOSTANDARD = "LVDS_25";
+#NET "rxp[1]" LOC = AM5 | IOSTANDARD = "LVDS_25";
+
+# location for snap fiber2 mgt: gtx7/rx2
+NET "txn[2]" LOC = AB2 | IOSTANDARD = "LVDS_25";
+NET "txp[2]" LOC = AB1 | IOSTANDARD = "LVDS_25";
+#NET "rxn[2]" LOC = AL4 | IOSTANDARD = "LVDS_25";
+#NET "rxp[2]" LOC = AL3 | IOSTANDARD = "LVDS_25";
+
+# location for snap fiber3 mgt: gtx8/rx3
+NET "txn[3]" LOC = Y2 | IOSTANDARD = "LVDS_25";
+NET "txp[3]" LOC = Y1 | IOSTANDARD = "LVDS_25";
+#NET "rxn[3]" LOC = AJ4 | IOSTANDARD = "LVDS_25";
+#NET "rxp[3]" LOC = AJ3 | IOSTANDARD = "LVDS_25";
+
+# location for snap fiber4 mgt: gtx9/rx8
+NET "txn[4]" LOC = V2 | IOSTANDARD = "LVDS_25";
+NET "txp[4]" LOC = V1 | IOSTANDARD = "LVDS_25";
+#NET "rxn[4]" LOC = AA4 | IOSTANDARD = "LVDS_25";
+#NET "rxp[4]" LOC = AA3 | IOSTANDARD = "LVDS_25";
+
+# location for snap fiber5 mgt: gtx10/rx9
+NET "txn[5]" LOC = T2 | IOSTANDARD = "LVDS_25";
+NET "txp[5]" LOC = T1 | IOSTANDARD = "LVDS_25";
+#NET "rxn[5]" LOC = W4 | IOSTANDARD = "LVDS_25"; # RX p/n swapped @snap12 end
+#NET "rxp[5]" LOC = W3 | IOSTANDARD = "LVDS_25"; # RX swapped^^^
+
+# location for snap fiber6 mgt: gtx11/rx10
+NET "txn[6]" LOC = P2 | IOSTANDARD = "LVDS_25";
+NET "txp[6]" LOC = P1 | IOSTANDARD = "LVDS_25";
+#NET "rxn[6]" LOC = U4 | IOSTANDARD = "LVDS_25"; # RX p/n swapped @snap12 end
+#NET "rxp[6]" LOC = U3 | IOSTANDARD = "LVDS_25"; # RX swapped^^^
+
+# location for snap fiber7 mgt: gtx2/rx11
+NET "txn[7]" LOC = AM2 | IOSTANDARD = "LVDS_25";
+NET "txp[7]" LOC = AM1 | IOSTANDARD = "LVDS_25";
+#NET "rxn[7]" LOC = R4 | IOSTANDARD = "LVDS_25";
+#NET "rxp[7]" LOC = R3 | IOSTANDARD = "LVDS_25";
+
+# snap Tx/Rx control lines
+#NET "t12_rst"   LOC = AC24;
+#NET "t12_sclk"  LOC = V27;
+#NET "t12_fault" LOC = P32;
+#NET "t12_sda"   LOC = A31;
+#NET "r12_sclk"  LOC = W26;
+#NET "r12_fok"   LOC = M30;
+#NET "r12_sda"   LOC = H29;
+#
+# RAT Loopback: outputs from Mezz
+#   RPC_TX
+#NET "rpc_tx[3]" LOC = D25; #  io_[340] -- alct_tx29, rpc_free0
+#NET "rpc_tx[2]" LOC = H32; #  io_[400] -- rpc_loop_tm
+#NET "rpc_tx[1]" LOC = J31; #  io_[401] -- rpc_posneg
+#NET "rpc_tx[0]" LOC = J32; #  io_[402] -- rpc_sync
+#NET "smb_clk" LOC = K17;   #  io_[268]  --smb1
+#NET "sel_usr[3]" LOC = H19; #  io_[289]  -- set 00XY for ALCT JTAG
+#NET "sel_usr[2]" LOC = K19; #  io_[290]    ^^^ then XY=sel[0,1]_alct
+#NET "sel_usr[1]" LOC = G18; #  io_[291]    ^^^ tdo comes in via alct_rx0
+#NET "sel_usr[0]" LOC = E19; #  io_[292]  -- set 1101 for RPC JTAG
+#NET "jtag_usr[1]" LOC = B18; # -- TDI
+#NET "jtag_usr[2]" LOC = F19; # -- TMS
+#NET "jtag_usr[3]" LOC = D20; # -- TCK
+#   RPC_RX outputs to loopback
+#NET "rpc_orx[10]" LOC = A33; #
+#NET "rpc_orx[11]" LOC = B33; #
+#NET "rpc_orx[12]" LOC = E31; #
+#NET "rpc_orx[13]" LOC = C33; #
+#NET "rpc_orx[14]" LOC = D31; #
+#NET "rpc_orx[15]" LOC = G31; #
+#NET "rpc_orx[16]" LOC = G30; #
+#NET "rpc_orx[17]" LOC = C32; #
+#NET "rpc_orx[18]" LOC = C34; #
+#NET "rpc_orx[19]" LOC = F31; #
+#NET "rpc_orx[20]" LOC = E33; #
+#NET "rpc_orx[21]" LOC = D32; #
+#NET "rpc_orx[22]" LOC = D34; #
+#NET "rpc_orx[23]" LOC = G33; #
+#NET "rpc_orx[24]" LOC = F33; #
+#NET "rpc_orx[25]" LOC = E32; #
+#   ALCT_TX
+#NET "smb_data" LOC = F15;  #  smb0  --io_[269]  -- alct_tx31
+#NET "alct_rxoe" LOC = F25; #  io_[341] -- alct_tx28
+#NET "alct_clock_en" LOC = D26;#  io_[348]
+#NET "alct_txoe" LOC = D27;    #  io_[347] -- alct_tx25
+#NET "alct_loop" LOC = F26; #  io_[342] -- alct_tx24
+#NET "alct_txb[23]" LOC = E26; #  io_[343]
+#NET "alct_txb[22]" LOC = G27; #  io_[344]
+#NET "alct_txb[21]" LOC = G26; #  io_[345]
+#NET "alct_txb[20]" LOC = E27; #  io_[346]
+#NET "alct_txb[19]" LOC = K26; #  io_[349]
+#NET "alct_txa[17]" LOC = D16; #  io_[261]  --adb_async
+#NET "alct_txa[16]" LOC = K27; #  io_[350]
+#NET "alct_txa[15]" LOC = E28; #  io_[351]
+#NET "alct_txa[14]" LOC = J26; #  io_[352]
+#NET "alct_txa[13]" LOC = G28; #  io_[353]
+#NET "alct_txa[12]" LOC = L26; #  io_[354]
+#NET "alct_txa[11]" LOC = D29; #  io_[355]
+#NET "alct_txa[10]" LOC = F28; #  io_[356]
+#NET "alct_txa[9]" LOC = H27; #  io_[357]
+#NET "alct_txa[8]" LOC = J27; #  io_[358]
+#NET "alct_txa[7]" LOC = K29; #  io_[359]
+#NET "alct_txa[6]" LOC = J29; #  io_[360]
+#NET "alct_txa[5]" LOC = K28; #  io_[361]
+#
+# RAT Loopback: inputs to Mezz
+#   RPC_RX
+#NET "rpc_i1rx[0]" LOC = L25; #
+#NET "rpc_i1rx[1]" LOC = A30; #
+#NET "rpc_i1rx[2]" LOC = J24; #
+#NET "rpc_i1rx[3]" LOC = B30; #
+#NET "rpc_i1rx[4]" LOC = G25; #
+#NET "rpc_i1rx[5]" LOC = H30; #
+#NET "rpc_i1rx[6]" LOC = B32; #
+#NET "rpc_i1rx[7]" LOC = F30; #
+#NET "rpc_i1rx[8]" LOC = J30; #
+#NET "rpc_i1rx[9]" LOC = B34; #
+#NET "rpc_i2rx[26]" LOC = G32; #
+#NET "rpc_i2rx[27]" LOC = H34; #
+#NET "rpc_i2rx[28]" LOC = H33; #
+#NET "rpc_i2rx[29]" LOC = T23; #
+#NET "rpc_i2rx[30]" LOC = T24; #
+#NET "rpc_i2rx[31]" LOC = U23; #
+#NET "rpc_i2rx[32]" LOC = C29; #
+#NET "rpc_i2rx[33]" LOC = J25; #
+#NET "rpc_i2rx[34]" LOC = D30; #
+#NET "rpc_i2rx[35]" LOC = C30; #
+#NET "rpc_i2rx[36]" LOC = C28; #
+#NET "rpc_i2rx[37]" LOC = A29; #
+#NET "rpc_smbrx" LOC = B16; # rpc_rx38
+#   ALCT_RX
+#NET "jtag_usr0_tdo" LOC = L21; #  jtag_usr[0]
+#NET "alct_rx[1]" LOC = A28; #
+#NET "alct_rx[2]" LOC = C27; #
+#NET "alct_rx[3]" LOC = B26; #
+#NET "alct_rx[4]" LOC = B28; #
+#NET "alct_rx[5]" LOC = B27; #
+#NET "alct_rx[6]" LOC = A26; #
+#NET "alct_rx[7]" LOC = D24; #
+#NET "alct_rx[8]" LOC = E24; #
+#NET "alct_rx[9]" LOC = E22; #
+#NET "alct_rx[10]" LOC = E23; #
+#NET "alct_rx[11]" LOC = C23; #
+#NET "alct_rx[12]" LOC = D22; #
+#NET "alct_rx[13]" LOC = C22; #
+#NET "alct_rx[14]" LOC = C24; #
+#NET "alct_rx[15]" LOC = C25; #
+#NET "alct_rx[16]" LOC = A25; #
+#NET "alct_rx[17]" LOC = B25; #
+#NET "alct_rx[18]" LOC = A24; #
+#NET "alct_rx[19]" LOC = H22; #
+#NET "alct_rx[20]" LOC = A23; #
+#NET "alct_rx[21]" LOC = C20; #
+#NET "alct_rx[22]" LOC = B22; #
+#NET "alct_rx[23]" LOC = G22; #
+#NET "alct_rx[24]" LOC = B20; #
+#NET "alct_rx[25]" LOC = B23; #
+#NET "alct_rx[26]" LOC = B21; #
+#NET "alct_rx[27]" LOC = A20; #
+#NET "alct_rx[28]" LOC = A21; #
+#NET "gp_io4" LOC = E16;    # -- alct_rx29 & rpc_done
+#NET "rpc_dsn" LOC = V28;   # -- alct_rx30
+#NET "vstat[2]" LOC = D11;  #  gclk_6s  -- RAT Vcore status, SLOW ~1.6 Hz
+
+
+## Other signals from TMB:
+#NET "vstat[0]" LOC = K13;  #  gclk_0s  -- TMB +5V status
+#NET "vstat[1]" LOC = V25;  #  gclk_2s  -- TMB +3.3V status
+#NET "vstat[3]" LOC = E11;  #  gclk_4s  -- TMB Vcore status
+
+
+# OLD 3.3V initial testing inputs (temporary) for "test_in[13:0]" on Mezz #1
+#NET "alct_rx[7]" LOC = D24;   # io333
+#NET "alct_rx[8]" LOC = E24;   # io332
+#NET "alct_rx[9]" LOC = E22;   # io331
+#NET "alct_rx[10]" LOC = E23;  # io330
+#NET "alct_rx[11]" LOC = C23;  # io329
+#NET "alct_rx[13]" LOC = C22;  # io327
+#NET "alct_rx[19]" LOC = H22;  # io321
+#NET "alct_rx[23]" LOC = G22;  # io317
+#NET "prom_d3" LOC = D15;    # io279
+#NET "prom_d7" LOC = D17;    # io275
+#NET "jtag_fpga3" LOC = K16; # io263
+#NET "sda0" LOC = K21;       # io302
+#NET "tmb_sn" LOC = F20;     # io274
+#NET "t_crit" LOC = M16;    # io267
+
+
+#
+# all the DMB signals:
+#NET "dmb_rx[0]" LOC = U33; #
+#NET "dmb_rx[0]" CLOCK_DEDICATED_ROUTE = FALSE;
+#NET "dmb_rx[1]" LOC = W31; #
+#NET "dmb_rx[2]" LOC = U32; #
+#NET "dmb_rx[3]" LOC = T34; #
+#NET "dmb_rx[4]" LOC = V34; #
+#NET "dmb_rx[5]" LOC = U31; #
+#NET "dmb_o3tx[48]" LOC = R33; #  io_[426]
+#NET "dmb_o3tx[45]" LOC = R34; #  io_[429]
+#NET "dmb_o3tx[44]" LOC = T33; #  io_[430]
+#NET "dmb_i3tx[43]" LOC = T31; #  io_[437]
+#NET "dmb_i3tx[39]" LOC = W32; #  io_[441]
+#NET "dmb_o2tx[33]" LOC = Y34; #  io_[447]
+#NET "dmb_o2tx[32]" LOC = W34; #  io_[448]
+#NET "dmb_i2tx[29]" LOC = Y32; #  io_[451]
+#NET "dmb_i2tx[28]" LOC = Y33; #  io_[452]
+#NET "dmb_i2tx[25]" LOC = AA33; #  io_[455]
+#NET "dmb_i2tx[24]" LOC = AA34; #  io_[456]
+#NET "dmb_o1tx[21]" LOC = AC34; #  io_[459]
+#NET "dmb_o1tx[20]" LOC = AB33; #  io_[460]
+#NET "dmb_o1tx[17]" LOC = AD32; #  io_[463]
+#NET "dmb_o1tx[16]" LOC = AC33; #  io_[464]
+#NET "dmb_i1tx[13]" LOC = AE34; #  io_[467]
+#NET "dmb_i1tx[12]" LOC = AD34; #  io_[468]
+#NET "dmb_i1tx[9]" LOC = AE32; #  io_[471]
+#NET "dmb_i1tx[8]" LOC = AE33; #  io_[472]
+#NET "dmb_tx[5]" LOC = AF33; #  io_[475]
+#NET "dmb_tx[4]" LOC = AF34; #  io_[476]
+#NET "dmb_tx[3]" LOC = AG33;#  io_[512]
+#NET "dmb_tx[2]" LOC = Y31; #  io_[513]
+#NET "dmb_o3tx[47]" LOC = A9;  #  io_[427]_a9 
+#NET "dmb_o3tx[46]" LOC = A8;  #  io_[428]_a8
+#NET "dmb_i3tx[42]" LOC = B8;  #  io_[438]_a5
+#NET "dmb_i3tx[41]" LOC = C10; #  io_[439]_a13
+#NET "dmb_i3tx[40]" LOC = C9;  #  io_[440]_a11
+#NET "dmb_i3tx[38]" LOC = C8;  #  io_[442]_a4
+#NET "dmb_o2tx[37]" LOC = D10; #  io_[443]_a12
+#NET "dmb_o2tx[36]" LOC = D9;  #  io_[444]_a10
+#NET "dmb_o2tx[35]" LOC = E8;  #  io_[445]_a7
+#NET "dmb_o2tx[34]" LOC = E9;  #  io_[446]_a6
+#NET "dmb_i2tx[31]" LOC = F10; #  io_[449]_a14
+#NET "dmb_i2tx[30]" LOC = F9;  #  io_[450]_a15
+#NET "dmb_i2tx[27]" LOC = AD9; #  io_[453]_a25
+#NET "dmb_i2tx[26]" LOC = AC9; #  io_[454]_a2
+#NET "dmb_o1tx[23]" LOC = AE9; #  io_[457]_a24
+#NET "dmb_o1tx[22]" LOC = AD10;#  io_[458]_a3
+#NET "dmb_o1tx[19]" LOC = AF9; #  io_[461]_a21
+#NET "dmb_o1tx[18]" LOC = AF10;#  io_[462]_a20
+#NET "dmb_i1tx[15]" LOC = AK9; #  io_[465]_a23
+#NET "dmb_i1tx[14]" LOC = AH8; #  io_[466]_a16
+#NET "dmb_i1tx[11]" LOC = AL9; #  io_[469]_a22
+#NET "dmb_i1tx[10]" LOC = AG8; #  io_[470]_a17
+#NET "dmb_tx[7]" LOC = AL8; #  io_[473]_a0
+#NET "dmb_tx[6]" LOC = AK8; #  io_[474]_a1
+#NET "dmb_tx[1]" LOC = AN9; #  io_[514]_a19
+#NET "dmb_tx[0]" LOC = AP9; #  io_[515]_a18
+
+#jg add the following lines 03/02/2015
+NET "f_sclk"     LOC = W27;
+NET "gbe_fok"    LOC = K23;
+NET "ck_gben" LOC = P5 | IOSTANDARD = "LVDS_25";
+NET "ck_gbep" LOC = P6 | IOSTANDARD = "LVDS_25";
+NET "ckgbe" TNM_NET = "clock_gbe";
+TIMESPEC "TS_clock_gbe" = PERIOD "clock_gbe" 8 ns HIGH 50%;
+
+# location for gbe mgt: gtx19
+NET "gbe_txn" LOC = A4 | IOSTANDARD = "LVDS_25";
+NET "gbe_txp" LOC = A3 | IOSTANDARD = "LVDS_25";
+NET "gbe_rxn" LOC = B6 | IOSTANDARD = "LVDS_25";
+NET "gbe_rxp" LOC = B5 | IOSTANDARD = "LVDS_25";
