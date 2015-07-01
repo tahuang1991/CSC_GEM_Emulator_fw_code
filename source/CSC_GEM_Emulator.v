@@ -3,91 +3,38 @@
 // *** JRG, firmware for Fiber Tx Bench Board, used for GEM-CSC pattern tests **
 //  Only for use on 2010 prototype boards; compile it for the XC6VLX195T FPGA
 //
-// Create Date:    1:22 1/15/13
+// Create Date:    3/4/15
 // Design Name: 
 // Module Name:    CSC_GEM_emulator
-//
-// started from dcfeb_test code v3.19.  Versioning info below.
-//  1.1: just get PRBS test working, with err_count sent to GbE at ~1 Hz. sw8: Force err on PB & sw7. why groups of 4?
-//        -- use MTP fiber 12
-//  1.2: try to add triad word inject and readout via GbE. !sw8: load data on PB & sw7. -- bug in gbe tx_dat logic
-//  1.3: fixed bug, works well.  Maybe too many triad words get injected... tuned LED assignments
-//  1.4: constrain inject triad to single clk80 period, hijack ferr_r logic.   d001f004?
-//        -- I don't see any cause for groups of 4 forced errors...
-//  1.5: bring rx_fc to test_led10.  also qpll_lock, rx_sync_done.  changed these 4 TPs are set same (5,7,9,10).
-//  1.6: send sw[8:7] to FP LEDs, also QPLL_Lock, rst/pb...etc.
-//  1.7: add NullVMEop logic, mod UCF.  debug triad transmit function...use to test triad RECEIVE function!
-//  1.8: edit UCF, lots of backplane probing logic for ccb_rx1,12,22-35 to LEDs and ccb_tx0-19 to CCB.
-//        -- remove Translator Loopback test & set on-board TMB bidir bus control signals to good state:
-//         /gtl_oe=0, gtl_loop=0, dmb_loop=0, rpc_loop=0, ccb_status_oe=1, /dmb_oe=0
-//  1.9: adjust some output assign values, make fp-LED7 OR of !pb + !L1reset
-//  1.10: add control for both hard_reset_fpga signals, invert some fp-LED signals,
-//        add trigger counter for 10 CCB pulses and CCB L1Reset function
-//  1.11: add 16-bit-serialized readout of results register via TMB_CFG_DONE, with ALCT_CFG_DONE as handshake
-//        -- activated with CCB_CMD 33h (load CCB VME "CMD bus" register with CCh)
-//        -- any non-33 CMD will clear the results register
-//        -- currently sends only the results for pulse_count
-//  1.12: increase Results register to 20 bits, decode & return all 8 bits of the CMD code
-//        -- establish a few new active functions: readback data_reg & pulses_fired, include ALCTadbs & HardRst, also TMBres0
-//        -- defined a set of futire functions that will be needed
-//  1.13: make some fixes in pulses_fired and results_r
-//  1.14: make some fixes in cmd CC results & get_bit_ptr.  Added logic to check most CCB signals to TMB using CMDs CC & C0.
-//        -- also trying 5-bit tmb_reserved_in data bus to the CCB & added a test for TMB_L1Arelease/request lines
-//  1.15: fix serial results_reg "end" signal, change tmb_l1a_relreq logic, tweak ccb_cmd_r control logic
-//  1.16: add Lock monitor logic for QPLL and ck160, put ccb_rx[0] into a BUFR for improved performance, but did not help!
-//  2.0:  TMB mainboard is now loopback-safe (2.5 V) so enable DMB-Loop & RPC-Loop.  Enable Loops for CCB test signals.
-//  2.1:  Add all DMB-Loop logic & load readback registers for software checks.  NO UCF entries for ccb_rx[50:48], yikes!
-//  2.2:  Added UCF entries for ccb_rx[50:48], UN-inverted tmb_l1a_relreq inputs from ccb_rx[25:24].
-//        -- Add TrigStop/Start functions for test control, but defaults to ON at Reset, Start not normally needed?
-//  2.3:  Add fixes for dmbfifo_step1ck tests.  No clock, looks frozen; try Step1 next....
-//  2.4:  Add STEP control, use ODDR to drive step1 as mirror of lhc_ck to dmbfifo_ck via DMB_Loopback
-//  2.5:  Put all 40 MHz functions into lhc_ck domain, add 7 ccb_cmd diagnostic signals & qpll_lock to test_leds
-//  2.6:  Use tmb_clock0 now for CCB bus communications, so Step4 can be used in other tests
-//        -- LONG TERM: FIX the clocking to the QPLL, better to use tmb_clock1 instead of tmb_clock05p (FPGA SEU can screw QPLL)
-//        -- fixed all DMB Loop logic to run on slwclk, bring loop[3] out&in to LEDs
-//  2.7:  add another EN delay inside PRBS39 & initialize ALL registers in there; add llout_dmbloop for testLEDs;
-//        add good_dmbloop monitoring too
-//        -- force bit err_dmbloop[27] to zero, but add debug for its lhc_tog_err in sw[7] testLEDs
-//  2.8:  take dmbloop back to 40 MHz; fix trig_stop/start 07/06 encoding; activate step4 with en_loopbacks (no sw[8] now)
-//  2.9:  en_loopbacks defails to 0 now; add a lhcloop_ck-lhc_ck sync step for en_lhcloop before toggle error check
-//  2.10: bring err_dmbloop[3] to sw7 Low test_LED; put LHC_CK into PRBS39!   Note: STEP4 KILLS QPLL (TMB_clock0) @TMB!!
 // 
-//  3.0:  add RAT Loop signals, new UCF too: 47 easy out-N-back + 8 more complicated involving RPCtx/JTAG control
-//        -- 55 outs: RPCtx(0-7), RPCrx(10-25), ALCTtx(0-29,31).  5 + 2 JTAG lines are SLOW (1.6 MHz), and 1 is SLOWER (~1 Hz)
-//        -- 55 ins (inc. JTAG MUXes on TMB):  RPCrx(0-9,26-38), ALCTrx(0-30), 1 Hz Vstat2.  Make 47 FAST results + 8 SLOW results
-//        -- Results include RATstat1-4(47), SLOWstat(8), RATerrCnt, SLOWerrCnt, SLOWcount & HzCount for # of respective trials
-//        -- JTAG "5" test enabled with (en_loopbacks & en_fibertests)
-//        -- JTAG "3" test (inc. 1 Hz Vstat2) enabled with (en_loopbacks & !en_fibertests)
-//        -- step4 enabled with (en_loopbacks & !en_fibertests): allows tests for DmbFIFOclk & RATloop(27,30)  (step 1,0,2 resp.)
-//        -- Reset & Powerup default is  en_loopbacks = en_fibertests = en_cabletests = 0
-//  3.1:  take care of "step" test cases (step 1,0,2).  These are dmb_loop27, rat_loop27 and rat_loop30.
-//  3.2:  fix a startup bug in dmbloop[27], fix bug in ratloop[24], bring 4 RATloops to test_leds (1,13,18,19)
-//        -- note: en_loopbacks should not be set before en_fibertests
-//  3.3:  bring out RAWIN signals to check ratloop timing relative to lhc_ck and "louts"
-//        -- first check EPIC if "in_" & "llout_" are not put into IO block registers.  -> YES, in IOBs.
-//  3.4:  send LOUTs for ratloops 0.5 lhc_ck cycle sooner (old LOUTs called LOUTPOS now).  Fix typo on ratloop18.
-//        -- *temp* just for testLED selection, made en_cabletests equivalent to sw[7] (send cmd = 1a in software)
-//  3.5:  CHANGED to SPEED GRADE -1!  Modified just one MMCM for this.  Good! in_ratloop1 stuck LOW on Mezz#1, io_397 open at translator.
-//        -- add MMCM for LHC_CK to get phase90, apply negedge 90 (= 270?) for ratloop LOUT registers
-//  3.6-3.7:  special tests to debug Mezz#1 rawin_ratloop[1] (stuck low, bad ball joint @translator chip)
-//  3.8:  enable ForceError on fiber for Tx output as well as on Rx input.  lhc_clk is DEAD on the bench!
-//  3.9:  use qpll_ck40 to drive lhc_clk (not lhc_ck), now try to force Tx errors.  delete GTX LOC constraint from Ben's code
-//  3.10err: ...send random data for 7-8 fibers, only rx for #1.  try removing comp_rx BUFGs
-//  3.10: ...remove all GBE logic & unused logic & extra clocks!
-//  3.11: fix error generator debounce, bring it to LED with slwclk too -- always errors from fiber, why?
-//  3.12: make some fixes for forced error generation (shft_seq, pb_pulse, rnd_word) -- always errors from fiber, why?
-//  3.13: initalize several registers properly related to ferr_z & triad_word
-//  3.14: change settings inside MGT MMCM module
-//  3.15: add logic to Reset MMCMs in sequence, add hold_bit for debounced !pb signal
-//  3.16: took away most logic using ck125, added SRL16Es to Reset MMCMs at startup, changed LOCK logics, changed testLEDs.
-//        -- add FCS=1 and float gtl_oe for Mezz 2012 compatibility, good for bench test use.
-//  3.17: changed to bufg_x2div2 MMCM, watch the lock40 signal.  -- Looks good! ( <- only edit after last compile )
-//  3.18: changed "test_led(1-4)" to inputs from connector, added "bc0" as input #1 to reset PRBS for fiber TX(1-7)
-//       -- bc0 also toggles a register going to an LED.  Changed all LEDs & test_leds.
-//  3.19: now handles high-true bc0(test_led1), ext_rst(test_led2) and ForceError(test_led3) inputs (was Low True)
-//       -- assigned these to appropriate functions like reset & ferr_i 
-//
+// Added BRAMs b00 to bff and associated GbE command functions (F3F3/F7F7 for Read/Write)
+// Need to add more command functions:
+//   FEFE to send one event... the first data word NUM can specify how many BX to send for the "event"
+//    - this comand will not "zero" the Read pointer
+//   F0F0 to rewind the Read pointer back to address zero
+//    - F7F7 will zero the Read pointer too (F3F3 has a separate read controller for GTX, does not to reset our pointer)
+//   FDFD to dump all contents of BRAMs... perhaps a "C" data code sent with this can initiate a continuous repeat loop?
+//    - receipt of any "non-FD" function will immediately halt the repeat loop
+//   F3F3 will switch the RDCLK source to 62.5 MHz
+//    - for all other cases the default RDCLK is 40 MHz (negedge?)
+// 
+// Need to control...
+//          .ADDRARDADDR ({1'b1, tx_adr[10:2], 6'h3f}),  // 16 bit RDADDR, but only 14:6 are used w/ECC.  1/3f?
+//          .ENARDEN ((cmd_code == 16'hf3f3) & (bk_adr == v) & gtx_ready),  // RDEN    ***REPLACE the f3f3 with a 1-bit signal***
+//          .CLKARDCLK   (gbe_txclk2 or ck40 with f3f3 switch), //  RDCLK     ***uses sel_rdclk***
 //  
+//   Make Read Pointer "rd_ptr"
+//    - this can be a 16-bit counter that runs at ck40 speed, but only 9 Adr bits are needed for a BRAM (so 7 bits can access extra BRAMs if needed)
+//    - the lowest 9 bits must be MUXed with tx_adr[10:2] to form the read address bus (rd_ptr is default, but F3F3 enables tx_adr)
+//    - similarly the RDCLK source default is ck40, but F3F3 enables ck625
+//   rd_ptr counter behavior:
+//    - FDFD will enable the counter and connect DOUT to the GTX TxDat bus for 512 clocks, then afterwards set the GTX TxDat bus to zero
+//         -- however, if "C" is set it will enable them until cancelled by a new command
+//    - FEFE will enable the counter and connect DOUT to the GTX TxDat bus for NUM clocks, then afterwards set the GTX TxDat bus to zero
+//    - rd_ptr is reset by F0F0 or F7F7
+// 
+// 
+// 
 //  
 //  about clocks:
 //   QPLL links with tmb_clock05p (no delay), which is disabled when step4=Hi and prevents QPLL lock (bad)
@@ -143,6 +90,13 @@ module CSC_GEM_Emulator(
     input [43:38]     dmb_i3tx,  // yes, input for loopback tests, only use on MODIFIED TMBs!
     input [9:0]       rpc_i1rx,
     input [37:26]     rpc_i2rx,
+// JG, new ports for GbE:
+    input 	      ck_gben, ck_gbep,
+    input 	      gbe_rxn, gbe_rxp,
+    input 	      gbe_fok,
+    output 	      gbe_txn, gbe_txp,
+    output 	      f_sclk,
+// ^^^^^^^^^^^^^
     output [3:0]      sel_usr,
     output [3:1]      jtag_usr, // [0] is Input, see above
     output [17:5]     alct_txa,
@@ -164,22 +118,17 @@ module CSC_GEM_Emulator(
     output reg [15:8] led_hi,
     output reg [10:9] test_led,
     input 	      t12_fault, r12_fok,
-    input  [7:1]      rxn, rxp,
-    output [7:1]      txn, txp,
+    //input  [7:1]      rxp,rxn,
+    output [7:0]      txp,txn,
     output 	      t12_rst, t12_sclk, r12_sclk
    )/* synthesis syn_useioff = 1 */;
 
 
 // snap12 GTX signals
-   wire        synced_snapt, synced_snapr, all_tx_ready;
+   wire        synced_snapt;
    wire        snap_clk2, ck160_locked, ck160_rst;
-   wire        snap_wait;
-//   wire [7:1]  check_ok_snapr, check_bad_snapr;
-//   wire [7:1]  rxdv_diff, rxcomma_diff, rxdv_snapr, rxcomma_snapr;  // 
-   wire [7:1]  tx_begin, tx_fc;
-//   wire [7:1]  lgood_snapr, lbad_snapr, llost_snapr;
-//   reg  [7:1]  rxdvr_snapr, rxcommar_snapr, check_okr_snapr, check_badr_snapr;
-   reg  [7:1]  frand, ferr_f;
+   wire [7:0]  tx_begin, tx_fc;
+   reg  [7:0]  ferr_f;
    reg [15:0]  err_count;
    reg  [7:0]  time_r_snap;
    reg  [7:0]  time_snap;
@@ -192,26 +141,29 @@ module CSC_GEM_Emulator(
    reg 	      free_tc, free_tc_r;
    reg 	      slow_tc, slow_tc_r;
    reg [7:0]  time_count;
-   reg [7:0]  time_40i;
-   reg [7:0]  time_40r;
-   wire  gtx_ready;
+   reg [7:0]  time_40_r;
+   reg [7:0]  time_40_rr;
+  // wire  gtx_ready;
    wire [13:0] test_in;  // not used?
    reg 	       l_lock40, ck160_locklost, qpll_lock_lost;
    reg 	       bc0_r, bc0_rr, bc0_r3, bc0_led;
-   wire        reset, gtx_reset;
+ //  wire        reset, gtx_reset;
    wire        ext_rst, force_err, bc0, stat0;  // stat[3:0] =  cfebemul_in[2,3,1,4] on Emul board!
    wire ck125, ck160, lhc_ck, lhc_clk, qpll_ck40, slwclk;   // ext 125 usr, QPLL160, ccb_ck40, QPLL40, ccb_ck40/25=1.6MHz
    wire lhc_ck0, lhc_ck90, lhc_ck180, lhc_ck270, lhcckfbout, lhcckfbout_buf, lhc_clk90;
-   wire zero, one;
-   wire [1:0] zero2;
-   wire [31:0] zero32;
-   
-   wire [12:0] low;
-   wire [3:0]  ignore;  // outputs from GTX we don't care about
+   wire zero = 1'b0;
+   wire one = 1'b1;
+   wire [1:0] zero2 = 0;
+   wire [31:0] zero32 = 0;
+   wire [12:0] low = 0;
+  // wire [3:0]  ignore;  // outputs from GTX we don't care about
+
+   wire        ck40, ck40buf, rdclk;
+   reg 	sel_rdclk;
 
 // Add-ons for Ben dCFEB testing:
    wire    tx_clk_out, tx_clk;
-   wire    rx_clk, rx_strt, rx_valid, rx_match, rx_fc;
+   wire    rx_strt, rx_valid, rx_match, rx_fc;
    wire [3:0]  word;
    wire [3:1]  nz;
    wire [47:0] comp_dat, comp_dout;
@@ -222,7 +174,8 @@ module CSC_GEM_Emulator(
    reg  [7:0]  triad_word, triad_word_r;
    reg  [7:0]  triad_word_l1, triad_word_l2, triad_word_l3, triad_word_l4, triad_word_l5, triad_word_l6;
    reg  [63:0] triad_counter;
-
+   reg 	       clct_pattern;  //change clct_pattern when pushing the reset button
+   reg fiber_reset;
 //  set itriad=9  if ( !sw[8] && itriad==0 && |comp_dat_r > 0 )  can we pick a few specific bits?  TRIAD FORMAT!
 //      -- comp_dat is 48 bits, takes 3-step logic....pipeline some before _r and finish before _2r
 //  48-bit wide, 5-deep pipeline; word0 is EN.  comp_dat_r, comp_dat_2r, .... comp_dat_5r
@@ -238,135 +191,91 @@ module CSC_GEM_Emulator(
    reg 	       debounced_bit;    // sets one pulse for 200 ns  (5 MHz clock)
    reg 	       pb_pulse;  //  <- sw7 & !pb, clears on pb high after 2nd seq. shift (debounce), lasts a while!
    reg 	       err_wait;   // pb_pulse & tc & !wait -> load rnd_word, set wait.  !pb_pulse & tc & wait -> clear wait
-   reg 	       ferr_i, ferr_r, ferr_done;
 
-   //assign bc0 = cfebemul_in[1];    // clct_stat1
-   //assign ext_rst = cfebemul_in[2];  // clct_stat3
-   //assign force_err = cfebemul_in[3];  // clct_stat2
-   //assign stat0 = cfebemul_in[4];  // ??
-	assign bc0 = 1'b0;
+// JG, new declarations for GbE and BRAM use:
+   wire  gbe_refck; // GTXE1 ref clk, used for MGTref and DoubleReset clock
+   wire  gbe_tx_outclk; // out from Tx PLL
+   wire  gbe_txclk2, gbe_txclk2_buf;   // drives logic for Tx, the "internal" choice for USR clock
+   wire  txoutclk_mmcm_lk;
+
+   parameter BRAM_LIM = 12'h007; // was bff for 256 Bram's: bff, or 8 -> b07.
+   parameter GBE_LIM = 16'h080b;  // WORDcount limit. allow extra bytes for MAC preamble, addr's...
+   reg [15:0] pkt_lim; // BytecountLimit/2. Plus extra 22 bytes for MAC preamble etc.
+   reg [15:0] counter;  // ^^^ 1st data word @ counter == 12; need 11 extra word counts, 22 bytes.
+   reg [10:0] tx_adr, rx_adr, rx_adr_r;
+   reg [15:0] gbe_rxcount;
+   reg [7:0]  pkt_id; 
+   reg [15:0] cmd_code, prev_cmd[3:0];
+   reg [11:0] bk_adr;
+   reg   tx_resetdone_r, rx_resetdone_r, rx_resetdone_r2, rx_resetdone_r3, pkt_send;
+   wire  gtx_ready, tx_resetdone, rx_resetdone;
+   reg [7:0]   ovfl_packet;
+   reg 	rx_timeout;
+   reg 	good_rx_cmd;
+   wire reset, gtx_reset;
+   wire ckgbe;
+   wire [3:0]  ignore;  // outputs from GTX we don't care about
+   wire        rxpll_lk;
+   wire [2:0]  rx_bufstat;
+   wire [1:0]  rx_comma;
+   wire [1:0]  rx_disp;  // other signals for GTX
+   wire [1:0]  rx_lostsync;
+   reg  [1:0]  gbe_kout, tx_kout, tx_kout_r;
+   reg 	comma_align;
+   wire [5:0]  rxer;
+   reg  [15:0] gbe_txdat, tx_out, tx_out_r;
+   wire [15:0] gbe_rxdat;
+   reg  [15:0] l_gbe_rxdat, ll_gbe_rxdat;
+   reg 	l_rxdv, l_kchar, ll_kchar, mac_seek, mac_sync, mac_ack, counter_send;
+   reg  [1:0]  kchar_r;
+   reg  [1:0]  sync_state, data_state;
+   wire        rxdv;
+
+   reg  [15:0] data_bram, data_bram_r;  // these are the BRAM MUX bus & register
+   wire [63:0] data_oram[BRAM_LIM:12'h000];
+   reg  [63:0] data_iram;
+   wire [BRAM_LIM:12'h000] sbiterr_oram,  dbiterr_oram;
+   reg         cycle4, cmd_f7f7;  // use this to toggle bram WRITE every 4th GbE word during cmd=f7f7
+
+   reg         crc_en, crc_rst;
+   wire [31:0] crc_out;
+   reg  [15:0] byte_count;
+   reg l_lock125, ck125_locklost;
+   reg [7:0] time_r,time_r_i;
 	
+	
+   assign f_sclk   = 1'b1;  // to Finisar GbE Transceiver
+// JG, end new declarations ^^^^^^
+
+
+	assign bc0 = 1'b0;
 	wire [15:0] geminfo[31:0];
 	
 	assign geminfo[0][15:0]=16'd0;
-	//assign geminfo[1]=16'd6;
 	assign geminfo[1][15:0]=16'd7;
-	//assign geminfo[1]=16'd8;
-	//assign geminfo[1]=16'd9;
-	//assign geminfo[1]=16'd10;
-	//assign geminfo[2]=16'd11;
-	//assign geminfo[2]=16'd12;
 	assign geminfo[2][15:0]=16'd13;
-	//assign geminfo[2]=16'd14;
-	//assign geminfo[2]=16'd15;
-	//assign geminfo[3]=16'd16;
-	//assign geminfo[3]=16'd17;
 	assign geminfo[3][15:0]=16'd18;
-	//assign geminfo[3]=16'd19;
-	//assign geminfo[4]=16'd20;
-	//assign geminfo[4]=16'd21;
 	assign geminfo[4][15:0]=16'd22;
-	//assign geminfo[4]=16'd23;
-	//assign geminfo[4]=16'd24;
-	//assign geminfo[5]=16'd25;
-	//assign geminfo[5]=16'd26;
 	assign geminfo[5][15:0]=16'd27;
-	//assign geminfo[5]=16'd28;
-	//assign geminfo[5]=16'd29;
-	//assign geminfo[6]=16'd30;
-	//assign geminfo[6]=16'd31;
 	assign geminfo[6][15:0]=16'd32;
-	//assign geminfo[6]=16'd33;
-	//assign geminfo[6]=16'd34;
-	//assign geminfo[7]=16'd35;
-	//assign geminfo[7]=16'd36;
 	assign geminfo[7][15:0]=16'd37;
-	//assign geminfo[7]=16'd38;
-	//assign geminfo[7]=16'd39;
-	//assign geminfo[8]=16'd40;
-	//assign geminfo[8]=16'd41;
 	assign geminfo[8][15:0]=16'd42;
-	//assign geminfo[8]=16'd43;
-	//assign geminfo[8]=16'd44;
-	//assign geminfo[9]=16'd45;
-	//assign geminfo[9]=16'd46;
 	assign geminfo[9][15:0]=16'd47;
-	//assign geminfo[9]=16'd48;
-	//assign geminfo[9]=16'd49;
-	//assign geminfo[10]=16'd50;
-	//assign geminfo[10]=16'd51;
 	assign geminfo[10][15:0]=16'd52;
-	//assign geminfo[10]=16'd53;
-	//assign geminfo[10]=16'd54;
-	//assign geminfo[11]=16'd55;
-	//assign geminfo[11]=16'd56;
 	assign geminfo[11][15:0]=16'd57;
-	//assign geminfo[11]=16'd58;
-	//assign geminfo[11]=16'd59;
-	//assign geminfo[12]=16'd60;
-	//assign geminfo[12]=16'd61;
 	assign geminfo[12][15:0]=16'd62;
-	//assign geminfo[12]=16'd63;
-	//assign geminfo[12]=16'd64;
-	//assign geminfo[13]=16'd65;
-	//assign geminfo[13]=16'd66;
 	assign geminfo[13][15:0]=16'd67;
-	//assign geminfo[13]=16'd68;
-	//assign geminfo[13]=16'd69;
-	//assign geminfo[14]=16'd70;
-	//assign geminfo[14]=16'd71;
 	assign geminfo[14][15:0]=16'd72;
-	//assign geminfo[14]=16'd73;
-	//assign geminfo[14]=16'd74;
-	//assign geminfo[15]=16'd75;
-	//assign geminfo[15]=16'd76;
 	assign geminfo[15][15:0]=16'd77;
-	//assign geminfo[15]=16'd78;
-	//assign geminfo[15]=16'd79;
-	//assign geminfo[16]=16'd80;
-	//assign geminfo[16]=16'd81;
 	assign geminfo[16][15:0]=16'd82;
-	//assign geminfo[16]=16'd83;
-	//assign geminfo[16]=16'd84;
-	//assign geminfo[17]=16'd85;
-	//assign geminfo[17]=16'd86;
 	assign geminfo[17][15:0]=16'd87;
-	//assign geminfo[17]=16'd88;
-	//assign geminfo[17]=16'd89;
-	//assign geminfo[18]=16'd90;
-	//assign geminfo[18]=16'd91;
 	assign geminfo[18][15:0]=16'd92;
-	//assign geminfo[18]=16'd93;
-	//assign geminfo[18]=16'd94;
-	//assign geminfo[19]=16'd95;
-	//assign geminfo[19]=16'd96;
 	assign geminfo[19][15:0]=16'd97;
-	//assign geminfo[19]=16'd98;
-	//assign geminfo[19]=16'd99;
-	//assign geminfo[20]=16'd100;
-	//assign geminfo[20]=16'd101;
 	assign geminfo[20][15:0]=16'd102;
-	//assign geminfo[20]=16'd103;
-	//assign geminfo[20]=16'd104;
-	//assign geminfo[21]=16'd105;
-	//assign geminfo[21]=16'd106;
 	assign geminfo[21][15:0]=16'd107;
-	//assign geminfo[21]=16'd108;
-	//assign geminfo[21]=16'd109;
-	//assign geminfo[22]=16'd110;
-	//assign geminfo[22]=16'd111;
 	assign geminfo[22][15:0]=16'd112;
-	//assign geminfo[22]=16'd113;
-	//assign geminfo[23]=16'd114;
-	//assign geminfo[23]=16'd115;
 	assign geminfo[23][15:0]=16'd116;
-	//assign geminfo[23]=16'd117;
-	//assign geminfo[23]=16'd118;
-	//assign geminfo[24]=16'd119;
-	//assign geminfo[24]=16'd120;
 	assign geminfo[24][15:0]=16'd121;
-	//assign geminfo[24]=16'd122;
-	//assign geminfo[24]=16'd123;
 	assign geminfo[25][15:0]=16'd0;
 	assign geminfo[26][15:0]=16'd0;
 	assign geminfo[27][15:0]=16'd0;
@@ -589,7 +498,7 @@ module CSC_GEM_Emulator(
    assign dmb_o2tx[37:34] = lout_dmbloop[25:22];
    assign dmb_o3tx[44] = lout_dmbloop[26];
    assign rawin_dmbloop[26:21] = {dmb_i3tx[43],dmb_i3tx[41:38],dmb_i3tx[42]};
-// JGhere, RAT_Loopback signals:
+//  RAT_Loopback signals:
    assign rpc_tx[3:0] = lout_ratloop[3:0]; // [3] is actually alct_tx29
    assign smb_clk = lout_ratloop[4];
    assign alct_txa[17:5] = lout_ratloop[17:5];
@@ -652,7 +561,6 @@ module CSC_GEM_Emulator(
    assign rawin_ratloop[45] = alct_rx[27];
    assign rawin_ratloop[46] = rpc_i2rx[26];
 
-   assign err_dmbloop[27] = lhc_tog_err; // JGhere, Fixed?  uses lhc_clk 40, but could use prbs data?
    assign good_dmbloop[27] = !(|err_dmbloop);
 
 //   assign step[4] = en_loopbacks; // ~sw[8];  // step4 Low makes free clocks from TMB; Hi allows logic signals for clocks
@@ -681,8 +589,8 @@ module CSC_GEM_Emulator(
       q=0;
       l_lock40 = 0;
       ck160_locklost = 0;
-      time_40i = 8'h00;
-      time_40r = 8'h00;
+      time_40_r = 8'h00;
+      time_40_rr = 8'h00;
       free_tc_r = 1'b0;
       slow_tc_r = 1'b0;
       loop_count = 0;
@@ -733,9 +641,6 @@ module CSC_GEM_Emulator(
       end
       shft_seq = 47'h000000000001;
       pb_pulse = 0;
-      ferr_i = 0;
-      ferr_r = 0;
-      ferr_done = 0;
       triad_word = 0;
       triad_word_r = 0;
       triad_word_l1 = 0;
@@ -745,8 +650,8 @@ module CSC_GEM_Emulator(
       triad_word_l5 = 0;
       triad_word_l6 = 0;
       triad_counter = 0;
-      frand[7:1] = 7'h01;
-      ferr_f[7:1] = 0;
+      clct_pattern = 0;
+      ferr_f[7:0] = 0;
       err_wait = 0;
       rnd_word = 0;
       debounced_bit = 0;
@@ -755,37 +660,48 @@ module CSC_GEM_Emulator(
       bc0_r = 1;
       bc0_rr = 1;
       bc0_r3 = 1;
+// JG, some new items:
+      l_rxdv=0;
+      l_kchar=0;
+      kchar_r=0;
+      tx_resetdone_r = 0;
+      rx_resetdone_r = 0;
+      rx_resetdone_r2 = 0;
+      rx_resetdone_r3 = 0;
+      comma_align = 0;
+      gbe_kout = 2'h1;
+      gbe_txdat = 16'h50bc;
+      tx_out_r = 16'h50bc;
+      tx_kout_r = 2'h1;
+      sync_state = 2'h0;
+      data_state = 2'h0;
+      mac_seek=0;
+      mac_sync=0;
+      mac_ack=0;
+      l_lock40 = 0;
+      ck160_locklost = 0;
+      l_lock125 = 0;
+      ck125_locklost = 0;
+      time_r = 8'h00;
+      pkt_lim = 16'd64;
+      gbe_rxcount = 16'h0000;
+      good_rx_cmd = 1'b0;
+      rx_timeout = 1'b0;
+      pkt_id = 8'h0000;
    end // initial begin
 
 
-    genvar u;
-    generate
-       for (u=0; u<27; u=u+1) begin:prbs39dmbgen
-	  prbs39_test dmb_loops(init_dmbloop[u], en_loopbacks_r, in_dmbloop[u], out_dmbloop[u], good_dmbloop[u], err_dmbloop[u], count_dmbloop[u], err_wait&rnd_word[u], (!locked)|reset, lhc_clk);
-       end
-    endgenerate
-
-    genvar x;
-    generate
-       for (x=0; x<47; x=x+1) begin:prbs39ratgen
-	  prbs39_test rat_loops(init_ratloop[x], en_loopbacks_r, in_ratloop[x], out_ratloop[x], good_ratloop[x], err_ratloop[x], count_ratloop[x], err_wait&rnd_word[x], (!locked)|reset, lhc_clk); // slwclk?
-       end
-    endgenerate
-
-    genvar w;
-    generate
-       for (w=0; w<5; w=w+1) begin:prbs39slowgen
-	  prbs39_test slow_loops(init_slowloop[w], en_loopbacks_r, in_slowloop[w], out_slowloop[w], good_slowloop[w], err_slowloop[w], count_slowloop[w], err_wait&rnd_word[w], (!locked)|reset, slwclk); // slwclk?
-       end
-    endgenerate
-
+ 
 
    BUFG lhcck(.I(tmb_clock0), .O(lhc_ck)); // only goes to mmcm now for 4-phase generation
    IBUFGDS #(.DIFF_TERM("TRUE"),.IOSTANDARD("LVDS_25"))  qpll40(.I(lhc_ckp) , .IB(lhc_ckn) , .O(qpll_ck40));
    IBUFGDS #(.DIFF_TERM("FALSE"),.IOSTANDARD("LVDS_25"))  clock125(.I(ck125p) , .IB(ck125n) , .O(ck125));
    IBUFDS_GTXE1  clock160(.I(ck160p) , .IB(ck160n) , .O(ck160), .ODIV2(), .CEB(zero));
 
-   bufg_div8clk clk1p6(lhc_clk,!lhc_locked,slwclk,stopped,locked); // slwclk is now 1.6 MHz (was 5 MHz using ck125)
+   IBUFDS_GTXE1  clock_gbe(.I(ck_gbep) , .IB(ck_gben) , .O(ckgbe), .ODIV2(), .CEB(1'b0));
+   BUFG gbe_refclock(.I(ckgbe), .O(gbe_refck));
+
+   bufg_div8clk clk1p6(lhc_clk,!lhc_locked,slwclk,stopped,locked); // slwclk is now 5 MHz again (was 1.6 MHz with div25 and lhc_clk, then 5 MHz using ck125)
 
    BUFR ccbrx0_clock(.I(_ccb_rx[0]), .O(ccb_cken));
 
@@ -871,10 +787,16 @@ module CSC_GEM_Emulator(
    (.O   (lhc_clk90),
     .I   (lhc_ck90));
 
-
+/* old Tao settings:
    assign gtx_ready = lock40 & ck160_locked & synced_snapr;
    assign reset = !_ccb_rx[1] | ext_rst | (!sw[7] & !pb);  // JGhere, this ccb_rx signal can screw up a bench test...
    assign gtx_reset = reset | !gtx_ready;
+*/
+
+   assign gtx_ready = tx_resetdone_r & rx_resetdone_r & txoutclk_mmcm_lk & lock40 & ck160_locked;
+   assign reset =  (!sw[7] & !pb);
+   assign gtx_reset = reset | !gtx_ready;
+   assign rxdv = ~(|rxer | rx_bufstat[2]) & gbe_fok; // idle is K28.5,D16.2  =  BC,50 in time order
 
 
 //   always @(posedge _ccb_rx[0] or posedge reset) begin
@@ -889,7 +811,6 @@ module CSC_GEM_Emulator(
 
 
 
-// JGnew, there are many changes in the next ~30 lines
    reg  tx_sel;
    always @(posedge tx_clk or posedge gtx_reset) begin
       if(gtx_reset) begin
@@ -899,90 +820,64 @@ module CSC_GEM_Emulator(
 	 tx_sel <= ~tx_sel;
       end
    end
-// assign trg_tx_data = rst_tx ? 32'h50BC50BC : (tx_sel ? out_data[47:16] : {out_data[15:0],frm_sep});
-// assign trg_tx_isk  = rst_tx ?  4'b0101 :     (tx_sel ?               4'b0000     :  4'b0001);
 
-   always @(posedge lhc_clk or posedge hold_bit) begin  // 80 MHz derived from GTX_TxPLL
-      if(hold_bit) begin
-	 geminfo_r <= 0;
-	 q <= 0;
-	 ferr_i <= 0;
-	 ferr_r <= 0;
-	 ferr_done <= 0;
-	 triad_word <= 0;
-	 triad_word_r <= 0;
-	 triad_word_l1 <= 0;
-	 triad_word_l2 <= 0;
-	 triad_word_l3 <= 0;
-	 triad_word_l4 <= 0;
-	 triad_word_l5 <= 0;
-	 triad_word_l6 <= 0;
-	 triad_counter <= 0;
-	 frand[7:1] <= 7'h01;
-	 ferr_f[7:1] <= 0;
-	 geminfo_r <= 0;  // JGnew
+
+
+   wire [8:0] rd_addr;
+   reg [15:0] rd_ptr=0;
+   reg [7:0]  cmd_code_r=0, cmd_code_rr=0, nbx_r=0, ibx=0;
+   reg 	 dump_enable=0,  dump_loop_i=0, event_enable=0, send_event_r=0;
+   reg 	 dump_enable_r=0, dump_enable_rr=0, dump_loop_r=0, event_enable_r=0, dump_done=0, event_done=0;
+   assign send_event = dump_enable_rr || (event_enable_r & !event_done);  // use this OR (f3f3 && (bk_adr == v)) to Read Enable the BRAMs
+
+   always @(posedge rdclk) begin
+//   always @(posedge ck40) begin  // try rdclk here instead, should be OK.
+      fiber_reset <= gtx_reset;
+      send_event_r <= send_event;
+
+      dump_enable_r <= dump_enable;
+      dump_loop_r <= dump_loop & dump_enable_r; // dump_loop is set in gbe cmd section
+      event_enable_r <= event_enable;
+      nbx_r <= nbx;
+      cmd_code_r <= cmd_code[7:0];
+      cmd_code_rr <= cmd_code_r;
+
+      if (gtx_reset)  dump_done <= 1'b0;
+      else if (dump_enable_rr) dump_done <= (&rd_ptr[8:1]);  // end dump when rd_ptr is 1FE or 1FF
+      else dump_done <= 1'b0;
+      dump_enable_rr <= (!dump_done | dump_loop_r) & dump_enable & dump_enable_r;
+
+      if (gtx_reset)  event_done <= 1'b0;
+      else if (event_enable_r) event_done <= (ibx==nbx_r);  // event_done is used in gbe cmd section
+      else event_done <= 1'b0;
+
+      if ( gtx_reset || ((cmd_code_r == 8'hf0)&&(cmd_code_rr == 8'hf0)) || ((cmd_code_r == 8'hf7)&&(cmd_code_rr == 8'hf7)) ) begin
+	 rd_ptr <= 0;
+	 ibx <= 0;
+	 send_event_r <= 0;
       end
-      else begin   // syncing forced single-clock effects (debounced, for bit error or triad word)
-	 //geminfo_r[15:0] <= geminfo[gempad_r][15:0];
-	 //triad_word_r <= triad_word;
-	 //ferr_i <= debounced_bit | force_err;	 // normally zero, force_err is ~25ns pulse
-	 //if (!tx_sel) q <= {q[0], debounced_bit};
-	 //ferr_r <= ferr_i;
-	 //frand[7:1] <= {frand[6:1],frand[7]};
-	 //if (!sw[8] && (q==2'b10)) triad_word <= {8'hAD, 9'h000, geminfo_r[6:0]}; // JGnew
-	 //else triad_word <= 24'h000000;
-	 //if (!ferr_done & ferr_r) begin  // begin the Forced Error sequence, sync with snap tx_clk
-	 //   ferr_f[7:1] <= frand[7:1];  // set for exactly one tx_clk cycle
-	 //   //triad_word_r <= geminfo_r[15:0];  // loaded for exactly one tx_clk cycle / this was changed to make triad word to equal geminfo
-	 //end
-	 //else begin  // end the Forced Error sequence when PB is released (ferr_i goes low)
-	 //   ferr_f[7:1] <= 0;
-	 //   //triad_word_r <= 0;
-	 //end	
- 	 //ferr_done <= ferr_r;
-	 
-	 triad_counter <= triad_counter + 1;
-
-	 if (triad_counter == 64'b1000) begin
-		 triad_word_l1 <= 8'b1000000;
-		 triad_word_l2 <= 8'b1000000;
-		 triad_word_l3 <= 8'b1000000;
-		 triad_word_l4 <= 8'b1000000;
-		 triad_word_l5 <= 8'b1000000;
-		 triad_word_l6 <= 8'b1000000;
-	 end
-	 else if (triad_counter == 64'b1001) begin
-		 triad_word_l1 <= 8'b1000000;
-		 triad_word_l2 <= 8'b1000000;
-		 triad_word_l3 <= 8'b1000000;
-		 triad_word_l4 <= 8'b1000000;
-		 triad_word_l5 <= 8'b1000000;
-		 triad_word_l6 <= 8'b1000000;
-	 end
-	 else if (triad_counter == 64'b1010) begin
-		 triad_word_l1 <= 8'b0;
-		 triad_word_l2 <= 8'b0;
-		 triad_word_l3 <= 8'b0;
-		 triad_word_l4 <= 8'b0;
-		 triad_word_l5 <= 8'b0;
-		 triad_word_l6 <= 8'b0;
-	 end
-	 else begin
-		 triad_word_l1 <= 8'b0;
-		 triad_word_l2 <= 8'b0;
-		 triad_word_l3 <= 8'b0;
-		 triad_word_l4 <= 8'b0;
-		 triad_word_l5 <= 8'b0;
-		 triad_word_l6 <= 8'b0;
-	 end
-
+      else if (dump_enable_rr | event_enable_r) begin
+	           if (!event_done) rd_ptr <= rd_ptr + 1'b1; // JGhere, use rd_ptr as BRAM RdAddr unless f3f3 is set?  use sel_rdclk for it!
+	           if (dump_enable_r) ibx <= 0;
+	           else if (ibx<nbx_r) ibx <= ibx + 1'b1;
       end
+      else ibx <= 0;
+   end
 
-   end // always @ (posedge tx_clk or posedge reset)
+   reg [47:0] fiber_out[7:0];
+   always @(negedge ck40) begin  // 80 MHz derived from GTX_TxPLL
+      fiber_out[0][47:0] <= (send_event) ? data_oram[0][47:0] : 48'h000000000000;  // send_event
+      fiber_out[1][47:0] <= (send_event) ? data_oram[1][47:0] : 48'h000000000000;
+      fiber_out[2][47:0] <= (send_event) ? data_oram[2][47:0] : 48'h000000000000;
+      fiber_out[3][47:0] <= (send_event) ? data_oram[3][47:0] : 48'h000000000000;
+      fiber_out[4][47:0] <= (send_event) ? data_oram[4][47:0] : 48'h000000000000;
+      fiber_out[5][47:0] <= (send_event) ? data_oram[5][47:0] : 48'h000000000000;
+      fiber_out[6][47:0] <= (send_event) ? data_oram[6][47:0] : 48'h000000000000;
+      fiber_out[7][47:0] <= (send_event) ? data_oram[7][47:0] : 48'h000000000000;
+   end // always
 
 
-// JGhere, lhc_clk is DEAD on the bench!   use qpll_ck40 instead
-// slwclk is DEAD on the bench!  will be fixed by switch to qpll_ck40
+// JGhere, probably a lot of lines in the next section can be deleted: 
    always @(posedge slwclk or posedge reset) // everything that uses 1.6 MHz clock with simple Reset (from lhc_clk)
      begin
 	if (reset) begin
@@ -1009,7 +904,7 @@ module CSC_GEM_Emulator(
 	   if (debounced_bit) gempad_r[4:0] <= gempad_in[5:1];
 
 	   free_count <= free_count + 1'b1;
-// JGhere, add slow loop checking logic:
+// slow loop checking logic:
 	   lout_slowloop[4] <= out_slowloop[4];
 	   lout_slowloop[3] <= out_slowloop[3];
 	   lout_slowloop[1] <= out_slowloop[1];
@@ -1061,6 +956,7 @@ module CSC_GEM_Emulator(
 
 	   if (free_count == 23'h7fffff) slow_tc <= 1;  // ~.6 Hz or 1.664 sec cycle, for GbE looping
 	   else slow_tc <= 0;
+// JGhere, probably delete a lot (most) of the previous section, above here ^^^^
 
 	   if (free_count[15:0] == 16'hffff) free_tc <= 1;  // ~24 Hz or .04 sec cycle, for debounce
 	   else free_tc <= 0;
@@ -1092,6 +988,8 @@ module CSC_GEM_Emulator(
 	end
      end
 
+
+// JGhere, probably delete all of the next ~450 lines:
    always @(posedge dmbfifo_step1ck or posedge reset) // used by one bit on DmbLoopback
      begin
 	if (reset) begin
@@ -1133,8 +1031,8 @@ module CSC_GEM_Emulator(
    always @(posedge lhc_clk or posedge reset) // everything that uses lhc_clk w/simple Reset
      begin
 	if (reset) begin
-	   time_40i <= 8'h00;
-	   time_40r <= 8'h00;
+	   time_40_r <= 8'h00;
+	   time_40_rr <= 8'h00;
 	   lhcloop_tog_r <= 0;
 	   en_lhcloop_r <= 0;
 	   l_lock40 <= 0;    // monitor clk160 from TXPLL this way
@@ -1186,10 +1084,10 @@ module CSC_GEM_Emulator(
 	end
 	else begin
 
-	   if (time_40r[7] & lock40) l_lock40 <= 1;
+	   if (time_40_rr[7] & lock40) l_lock40 <= 1;
 	   if (l_lock40 & (!lock40)) ck160_locklost <= 1;
-	   time_40i <= time_count;
-	   time_40r <= time_40i;  // transfer slow slwclk time counter to lhc_clk domain
+	   time_40_r <= time_count;
+	   time_40_rr <= time_40_r;  // transfer slow slwclk time counter to lhc_clk domain
 	   lhcloop_tog_r <= lhcloop_tog; // 
 	   qpll_lock_lost <= !qpll_lock | qpll_lock_lost;
 	   in_pulse_r <= in_pulse;
@@ -1357,53 +1255,537 @@ module CSC_GEM_Emulator(
    assign _ccb_tx[17:9] = pulse_count[8:0];  // 9 bit alct_status, to CCB Front Panel (our LED plug)
    
 
-   always @(posedge rx_clk) // everything that uses 160 MHz snap USR clock, w/o Reset
+
+// JGhere, Begin new code insertion for GbE and BRAMs:
+   wire        clkfbout;
+  MMCM_ADV
+  #(.BANDWIDTH            ("OPTIMIZED"),
+    .CLKOUT4_CASCADE      ("FALSE"),
+    .CLOCK_HOLD           ("FALSE"),
+    .COMPENSATION         ("ZHOLD"),
+    .STARTUP_WAIT         ("FALSE"),
+    .DIVCLK_DIVIDE        (4),
+    .CLKFBOUT_MULT_F      (36.000),  // was 43.000, changed so FVCO <= 1200 (now 1125 MHz)
+    .CLKFBOUT_PHASE       (0.000),
+    .CLKFBOUT_USE_FINE_PS ("FALSE"),
+    .CLKOUT0_DIVIDE_F     (18.000),  // was 21.500, for 62.5 MHz output, changed to maintain div2
+    .CLKOUT0_PHASE        (0.000),
+    .CLKOUT0_DUTY_CYCLE   (0.500),
+    .CLKOUT0_USE_FINE_PS  ("FALSE"),
+    .CLKOUT1_DIVIDE       (12),      // was 15 for 90 MHz, now 12 for 93.75 MHz
+    .CLKOUT1_PHASE        (0.000),
+    .CLKOUT1_DUTY_CYCLE   (0.500),
+    .CLKOUT1_USE_FINE_PS  ("FALSE"),
+    .CLKOUT2_DIVIDE       (13),      // was 16 for 84 MHz, now 13 for 86.538 MHz
+    .CLKOUT2_PHASE        (0.000),
+    .CLKOUT2_DUTY_CYCLE   (0.500),
+    .CLKOUT2_USE_FINE_PS  ("FALSE"),
+    .CLKOUT3_DIVIDE       (75),      // was 89 for 15.125 MHz, now 75 for 15.0 MHz
+    .CLKOUT3_PHASE        (0.000),
+    .CLKOUT3_DUTY_CYCLE   (0.500),
+    .CLKOUT3_USE_FINE_PS  ("FALSE"),
+    .CLKIN1_PERIOD        (8.0),
+    .REF_JITTER1          (0.010))
+  txusrclk_mmcm
+    // Output clocks
+   (.CLKFBOUT            (clkfbout),
+    .CLKFBOUTB           (),
+    .CLKOUT0             (gbe_txclk2_buf),
+    .CLKOUT0B            (),
+    .CLKOUT1             (ck94),   // JG: ck90 not used anymore, but changed to ck94 anyway
+    .CLKOUT1B            (),
+    .CLKOUT2             (ck87),   // JG: ck84 not used anymore, but changed to ck87 anyway
+    .CLKOUT2B            (),
+    .CLKOUT3             (ck15),   // JG: ck15125 not used anymore, but changed to ck15 anyway
+    .CLKOUT3B            (),
+    .CLKOUT4             (),
+    .CLKOUT5             (),
+    .CLKOUT6             (),
+     // Input clock control
+    .CLKFBIN             (clkfbout),
+    .CLKIN1              (ck125),  // use ck125 or gbe_tx_outclk...or gbe_refck?
+    .CLKIN2              (1'b0),
+     // Tied to always select the primary input clock
+    .CLKINSEL            (1'b1),
+    // Ports for dynamic reconfiguration
+    .DADDR               (7'h0),
+    .DCLK                (1'b0),
+    .DEN                 (1'b0),
+    .DI                  (16'h0),
+    .DO                  (),
+    .DRDY                (),
+    .DWE                 (1'b0),
+    // Ports for dynamic phase shift
+    .PSCLK               (1'b0),
+    .PSEN                (1'b0),
+    .PSINCDEC            (1'b0),
+    .PSDONE              (),
+    // Other control and status signals
+    .LOCKED              (txoutclk_mmcm_lk),
+    .CLKINSTOPPED        (),
+    .CLKFBSTOPPED        (),
+    .PWRDWN              (1'b0),
+    .RST                 (!rxpll_lk));
+
+//    BUFG clkf_buf(.O (clkfbout_buf), .I (clkfbout));
+    BUFG clkf_buf(.O (gbe_txclk2), .I (gbe_txclk2_buf));
+//    BUFGMUX rdclk_buf(.O (rdclk), .I0 (~ck40buf),.I1 (gbe_txclk2_buf), .S(sel_rdclk));
+    BUFGMUX rdclk_buf(.O (rdclk), .I0 (ck40buf),.I1 (gbe_txclk2_buf), .S(sel_rdclk));
+
+   assign rd_addr = (sel_rdclk)? tx_adr[10:2] : rd_ptr[8:0];
+
+
+    genvar v;
+    generate
+       for (v=12'h000; v<=BRAM_LIM; v=v+1'b1) begin:bramgen
+           RAMB36E1 #(
+	.DOA_REG(0),         // Optional output register (0 or 1)
+	.DOB_REG(0),         // Optional output register (0 or 1)
+	.EN_ECC_READ("TRUE"),
+	.EN_ECC_WRITE("TRUE"),
+	.RAM_MODE("SDP"),    // "SDP" or "TDP"
+	.READ_WIDTH_A(72), // 0, 1, 2, 4, 9, 18, 36, or 72, 64??
+//.READ_WIDTH_B(0), // 0, 1, 2, 4, 9, 18, or 36
+//.WRITE_WIDTH_A(0), // 0, 1, 2, 4, 9, 18, or 36
+	.WRITE_WIDTH_B(72), // 0, 1, 2, 4, 9, 18, 36, or 72, 64??
+//  --WriteMode: Value on output upon a write ("WRITE_FIRST", "READ_FIRST", or "NO_CHANGE")--
+	.WRITE_MODE_A("READ_FIRST"),
+	.WRITE_MODE_B("READ_FIRST")
+//        .WRITEMODE("WRITE_FIRST")  // "WRITE_FIRST", "READ_FIRST", or "NO_CHANGE"
+            )
+    block_ram_ecc
+        (
+         .ADDRARDADDR ({1'b1, rd_addr[8:0], 6'h3f}),  // 16 bit RDADDR, but only 14:6 are used w/ECC.  1/3f?
+         .DIADI   (data_iram[31:0]),  // DI low 32-bit
+         .DIBDI   (data_iram[63:32]), // DI high 32-bit
+         .DOADO   (data_oram[v][31:0]),   // DO low 32-bit
+         .DOBDO   (data_oram[v][63:32]),  // DO high 32-bit
+         .WEA     (4'h0),      // WEA, NA for SDP
+         .ENARDEN (send_event || ((cmd_code == 16'hf3f3) & (bk_adr == v) & gtx_ready)),  // RDEN
+         .REGCEAREGCE (1'b0),  // REGCE, NA if DO_REG=0
+         .RSTRAMARSTRAM(1'b0),
+         .RSTRAMB(1'b0),       // NA if SDP
+         .RSTREGARSTREG(1'b0), // NA if SDP or DO_REG=0
+         .RSTREGB(1'b0),       // NA if SDP or DO_REG=0
+         .CLKARDCLK   (rdclk), //  RDCLK
+// not valid if DO_REG=0:  REGCEAREGCE, REGCEB, RSTREGARSTREG, RSTREGB
+// not used for SDP:  CASCADE*, REGCEB, RSTRAMB, RSTREGARSTREG, RSTREGB, WEA
+         .ADDRBWRADDR ({1'b1, rx_adr_r[10:2], 6'h3f}), // 16 bit WRADDR, but only 14:6 are used w/ECC.  1/3f?
+         .WEBWE   (8'hFF),  // WE?  WEBWE(8 bits)
+         .ENBWREN (cycle4 & (bk_adr == v) & gtx_ready),   // WREN  Alfke: "WE off" is not sufficient to protect
+         .REGCEB  (1'b0),       // REGCEB        Init data, So require stable clocks before EN is set,
+         .CLKBWRCLK   (gbe_txclk2),  // WRCLK    and ensure safe setup time for ADR when EN is Enabled!
+//        .RST     (reset) // err.mon: SBITERR DBITERR   
+         .INJECTSBITERR (1'b0),
+         .SBITERR (sbiterr_oram[v]),
+         .INJECTDBITERR (1'b0),
+         .DBITERR (dbiterr_oram[v])
+        );
+      end
+    endgenerate
+
+   mac_crc  mac_crc32(gbe_txdat, crc_en, crc_out, crc_rst, gbe_txclk2);
+
+
+   always @(posedge ck40 or posedge reset) // everything that uses ck40 w/simple Reset
      begin
-	time_r_snap <= time_count;
-	time_snap <= time_r_snap;  // transfer slow slwclk time counter to snap USR clock domain
+	if (reset) begin
+	   l_lock125 <= 0;    // use ck40(160) to monitor ck125
+	   ck125_locklost <= 0;
+	end
+	else begin
+	   if (time_40_rr[7] & locked) l_lock125 <= 1;
+	   if (l_lock125 & (!locked)) ck125_locklost <= 1;
+	end
      end
 
-
-// JGhere, begin fiber Rx data handling section *7:
-   assign push_fifo = ( word[0] && save_triad );
-   always @(posedge rx_clk or posedge reset or posedge snap_wait) // things that uses 160 MHz snap USR clock, w/Reset
+   always @(posedge gbe_txclk2) // everything that uses GbE USR clock, no Reset
      begin
-	if (reset | snap_wait) begin
-//	   err_count <= 0;  // use this to count PRBS errors?
-	   comp_dat_r  <= 0;
-	   comp_dat_2r <= 0;
-	   comp_dat_3r <= 0;
-	   comp_dat_4r <= 0;
-	   comp_dat_5r <= 0;
-	   save_triad  <= 0;
-	   itriad  <= 0;
-	   rst_errcnt_r <= 1'b1;
+	tx_out_r  <= tx_out;
+	tx_kout_r <= tx_kout;
+	time_r_i  <= time_count;
+     end
+
+   always @(posedge gbe_txclk2 or posedge reset) // everything using GbE USR clock w/simple Reset
+     begin
+	if (reset) begin
+	   time_r <= 8'h00;
+	   tx_resetdone_r <= 0;
+	   rx_resetdone_r <= 0;
+	end
+	else begin
+	   tx_resetdone_r <= tx_resetdone;
+	   rx_resetdone_r <= rx_resetdone;
+	   time_r <= time_r_i;  // transfer slow clk time counter to GbE USR clock domain
+	end
+     end
+
+   reg   event_done_r = 0, dump_done_r = 0, dump_loop = 0;
+   reg [7:0]  nbx_i=0, nbx=0;
+   always @(posedge gbe_txclk2 or posedge gtx_reset) // everything using GbE USR clock w/GTX_Reset
+     begin
+	if (gtx_reset) begin
+	   comma_align <= 0;
+	   counter_send <= 0;
+	   l_rxdv <= 0;
+	   l_kchar <= 0;
+	   ll_kchar <= 0;
+	   l_gbe_rxdat <= 0;
+	   ll_gbe_rxdat <= 0;
+	   kchar_r <= 0;
+	   ovfl_packet <= 0;
+	   counter <= 16'h0000;
+	   ireg <= 0;
+	   tx_adr <= 0;
+	   rx_adr <= 0;
+	   rx_adr_r <= 0;
+	   cycle4 <= 0;
+	   cmd_f7f7 <= 0;
+	   pkt_id <= 8'h0000;
+	   gbe_rxcount <= 16'h0000;
+	   cmd_code <= 16'h0000;
+	   bk_adr <= 12'h000;
+	   gbe_txdat <= 16'h50bc;  // <-- idle 28.5/16.2
+	   gbe_kout <= 2'h1;
+	   sync_state <= 2'h0;
+	   data_state <= 2'h0;
+	   mac_seek <= 0;
+	   mac_sync <= 0;
+	   mac_ack  <= 0;
+	   rx_resetdone_r2 <= 0;
+	   rx_resetdone_r3 <= 0;
+	   crc_rst <= 1;
+	   crc_en <= 0;
+	   pkt_send <= 0; // 1st data word @counter == 12 --> 11 extra words, so subtract 22 bytes.
+	   good_rx_cmd <= 1'b0;
+	   rx_timeout <= 1'b0;
+	   data_bram <= 16'hd1d0;
+	   data_bram_r <= 16'he4e2;
+	   sel_rdclk <= 1'b0;
+	   event_done_r <= 0;
+	   dump_done_r <= 0;
+	   dump_loop_i <= 0;
+	   dump_loop <= 0;
+	   nbx_i <= 0;
+	   nbx <= 0;
 	end
 
 	else begin // Not Reset case
-// set itriad=9  if ( !sw[8] && itriad==0 && |comp_dat_r > 0 )  can we pick a few specific bits?  TRIAD FORMAT!
-// push FIFO if (word[0] && itriad > 0 )
-	   rst_errcnt_r <= rst_errcnt;
-	   if (!sw[8] && !save_triad && |nz && word[0]) begin  // 6-input logic
-	      itriad <= 9;
-	      save_triad <= 1;
+	   event_done_r <= event_done;
+	   dump_done_r  <= dump_done;
+	   rx_resetdone_r2 <= rx_resetdone_r;
+	   rx_resetdone_r3 <= rx_resetdone_r2;
+	   if (rx_resetdone_r3) comma_align <= 1; // maybe use time_r > 8'h10 ?
+
+	   crc_rst <= (data_state == 2'h2)? 1'b1 : 1'b0;  // needs one cycle during state 3
+
+
+	   if (dump_done_r) dump_loop <= 0;
+	   else dump_loop <= dump_loop_i; // sets FPGA for continuous loop of sending all patterns
+	   if (event_done_r) nbx <= 0;
+	   else nbx <= nbx_i;  // tells how many BX to send for this event (8 bits)
+
+	   if ((!dump_enable & debounced_bit) | (cmd_code == 16'hFDFD)) dump_enable <= 1'b1;  // was !dump_done_r ...before that was 1'b1;.  dump_done is driven by ck40
+	   else if (cmd_code[15:12] == 4'hF) dump_enable <= 1'b0;  // stop dump on any non-FDFD command: F0F0, F3F3, F7F7, FEFE...
+	   else if (dump_enable) dump_enable <= !dump_done_r;  // dump_done is driven by ck40   ... was 1'b1;
+	   else dump_enable <= dump_enable;
+
+	   if (cmd_code == 16'hFEFE) event_enable <= !event_done_r;  // event_done is driven by ck40
+	   else if (cmd_code[15:12] == 4'hF) event_enable <= 1'b0;   // stop dump on any non-FEFE command: F0F0, F3F3, F7F7, FDFD...
+	   else event_enable <= event_enable;
+
+	   if (cmd_code == 16'hF3F3) sel_rdclk <= 1'b1;
+	   else sel_rdclk <= 1'b0;  // JGhere, maybe this will change the clock before the Read is finished, so delay it?
+
+	   if (cmd_code == 16'hf3f3) begin  // load counter2 to READ registers and send it out
+	      pkt_lim <= 16'd2061;   // 16'd61 special test size 100 bytes.  later will be 4 KB
 	   end
-	   else if (push_fifo) begin
-	      itriad <= itriad - 1'b1;
-	      if(itriad == 4'h1)save_triad <= 0;
+	   else if (cmd_code == 16'hf7f7) pkt_lim <= 16'd2048; // just over 4 KB for good Rx/Tx BRAM loading overlap
+	   else pkt_lim <= 16'd36; // our usual 50-byte size is default; F3F3 is the special 4 KB count
+
+	   byte_count <= 16'hffff&((pkt_lim*2) - 16'd22); // Need BYTES; subtract preamble bytes etc.
+
+  // select what goes where for the readout BRAM bus
+	   if ((bk_adr < 12'h000) || (bk_adr > BRAM_LIM)) data_bram <= 16'h0a0f; // limited range of bk_adr space
+	   else if (cmd_code == 16'hf3f3) begin
+	      case (tx_adr[1:0])
+		2'b00: data_bram <= data_oram[bk_adr][63:48]; // correct for latency of BRAM readout response
+		2'b01: data_bram <= data_oram[bk_adr][15:0];
+		2'b10: data_bram <= data_oram[bk_adr][31:16];
+		2'b11: data_bram <= data_oram[bk_adr][47:32];
+	      endcase // case (tx_adr[1:0])
 	   end
-	   if (word[0]) begin
-	      comp_dat_r   <= comp_dat;
-	      comp_dat_2r   <= comp_dat_r;
-	      comp_dat_3r   <= comp_dat_2r;
-	      comp_dat_4r   <= comp_dat_3r;
+	   else data_bram <= 16'hdfd8;
+
+	   data_bram_r  <= data_bram;
+
+	   if (data_state[1]) begin  // end of sent data packet
+//	      cmd_code <= 16'h0000;
+	      if(|cmd_code) cmd_code <= 16'h0000;
+	      bk_adr <= 12'h000;
+	      pkt_send <= 1'b0;
+	      counter <= 0;
+	      if (data_state == 2'h2) pkt_id <= pkt_id + 1'b1;
 	   end
-	   if (rst_errcnt_r) err_count <= 0;
-	   else if ( !snap_wait & time_snap[7] ) begin  // wait 3000 clocks after Reset
-	      if ( !rx_match & rx_valid ) err_count <= err_count + 1'b1;
+	   else if (rx_timeout) begin
+	      bk_adr <= 12'h000;
+	      counter <= 0;
+	      pkt_send <= 1'b0;
 	   end
-        end
+	   else if (!sync_state[0] && pkt_send) begin
+	      counter <= counter + 1'b1;  // verified that sync[0] ends OFF
+	   end
+ 	   else if (!sync_state[0] && time_r[7] && (cmd_code > 16'h0000)) pkt_send <= 1'b1;
+//	   else if (!rxdv && loop_command && (cmd_code == 16'h0000) ) cmd_code <= 16'hf4f4;
+
+// JGhere, Build GbE packet for Tx to PC:
+	   if ((counter > 0) && (counter <= pkt_lim)) begin  // put data on gbe_txdat after preamble, MACaddr's & Length
+	      counter_send <= 1;
+	      if (counter == 16'd1) begin
+		 gbe_txdat <= 16'h55fb;
+		 gbe_kout <= 2'h1;
+		 tx_adr <= 0;
+	      end
+	      else if (counter < 16'd5) begin
+		 gbe_txdat <= {counter[2],15'h5555};
+		 gbe_kout <= 2'h0;
+	      end
+	      else if (counter < 16'd7) begin
+		 crc_en <= 1;
+		 gbe_txdat <= 16'hffff; // MAC32 No Longer inverts gbe_txdat input w/counter == 5 or 6; just send ones.
+/*  JRG,  for historical reference...
+   		 en_levelshift <= (cmd_code != 16'hf2f2);
+		 en_csr <= (cmd_code != 16'hf5f5);
+*/
+	      end
+	      else if (counter < 16'd11) begin
+		 gbe_txdat <= 16'h0000;
+	      end
+	      else if (counter < 16'd12) begin  // only one cycle for this step!  counter == 11
+		 gbe_txdat <= {byte_count[7:0],byte_count[15:8]};
+		 tx_adr <= tx_adr + 1'b1; // shifting 2-deep tx_bram pipeline
+		 ireg <= 0;
+	      end
+	      else if (counter < 16'd13) begin  // only one cycle for this step!  counter == 12
+		 gbe_txdat <= cmd_code;    //  <-- first word returns the cmd_code
+		 tx_adr <= tx_adr + 1'b1; // shifting 2-deep tx_bram pipeline
+	      end
+
+// JGhere: this is the gbe command decode.  A lot of it is not needed by the CSC_GEM test stand!
+	      else begin // if (counter >= 16'd13).  first data word @counter == 13 --> 12 counts ahead!
+		 tx_adr <= tx_adr + 1'b1;
+		 ireg <= ireg + cmd_code[1] + (~counter[0]&cmd_code[0]); // 32b if CMD Odd, 16b if CMD Even
+		   //  F5 => 0 + (cnt[0]&1), alternates ireg increments for 32-bit register readout.
+		   //  F6 => 1 + (cnt[0]&0), continuous increments for 16-bit register readout.
+
+// JGhere: next 3 lines are dummies, can be deleted...  not needed by the CSC_GEM test stand!
+		 if(cmd_code[1]^cmd_code[0]) begin  // generalized for f1f1 or f2f2 ( == !f3f3 && !f4f4) or f5 or f6...f9, fa, fd, fe
+		    gbe_txdat <= 16'ha1a1;
+		 end
+		 else if (cmd_code[2]) begin  // Function4 is active, or f7 or fc, ff.  send cmd_code first.
+		    if (counter < 16'd14) gbe_txdat <= {4'hd,bk_adr[11:0]};    //  <-- 2nd word returns the bk_adr
+		    else gbe_txdat <= {pkt_id[4:0],rx_adr[10:0]};  // send the sequential packet ID for each packet, plus 11 bit sub-address
+		 end
+		 else if(~|cmd_code[3:0]) begin  // only command f0 can make this true
+		    gbe_txdat <= prev_cmd[counter[1:0]];    //  returns preveious few cmd_codes, repeats to end of packet
+		 end
+
+		 else if (bk_adr <= BRAM_LIM) begin  // this is data_bram range.  for f3f3, f8f8, fbfb...
+		    if (counter < 16'd14) gbe_txdat <= {4'hd,bk_adr[11:0]};    //  <-- 2nd word returns the bk_adr
+		    else gbe_txdat <= data_bram_r[15:0];  // added a pipe register for data_bram, allows better timing?
+		 end
+		 else begin
+		    gbe_txdat <= 16'h50bc;  // <-- idle 28.5/16.2
+		    gbe_kout <= 2'h1;
+		 end
+	      end // if (counter >= 16'd13)
+	   end // if (counter > 0 && counter <= GBE_LIM)
+//jg note: the MAC_ACK etc still don't work (v11p5)...do we care?
+	   else if (!time_r[7] || sync_state[0]) begin  // send Sync "pairs" for a while after Reset
+	      if (time_r[6] && time_r[1]) begin
+		 mac_seek <= (ll_kchar && !l_kchar && ll_gbe_rxdat == 16'h42bc);
+		 if (mac_seek && l_kchar && l_gbe_rxdat == 16'hb5bc) mac_sync <= 1'b1;
+		 if (mac_seek && mac_sync && !ll_kchar && ll_gbe_rxdat == 16'h4000) mac_ack <= 1'b1;
+	      end
+	      else mac_seek <= 0;
+
+	      case (sync_state) 
+		2'b00: gbe_txdat <= 16'h42bc;
+		2'b10: gbe_txdat <= 16'hb5bc;
+		default: gbe_txdat <= {1'b0,mac_sync,14'h0000}; // <-- we want this to be the final sync state.
+	      endcase
+	      gbe_kout  <= ((~sync_state) & 2'b01);
+	      sync_state <= sync_state + 1'b1;
+	   end
+	   else  begin // otherwise send Idles, allows time for Rx Checking
+	      counter_send <= 0;
+	      crc_en <= 0;
+	      gbe_txdat <= 16'h50bc;  // <-- idle 28.5/16.2
+	      gbe_kout <= 2'h1;
+	      tx_adr <= 0;
+	      if (counter_send) data_state <= 2'h1;
+	      else if (data_state > 2'h0) data_state <= data_state + 2'h1;
+	   end
+
+	   l_rxdv <= rxdv;  // note, rxdv may stay True for over .5 sec after Reset!  Why...?
+	   ll_kchar <= l_kchar;
+	   l_kchar <= rxer[0]|rxer[1];
+	   kchar_r <= rxer[1:0];
+	   ll_gbe_rxdat <= l_gbe_rxdat;
+	   l_gbe_rxdat <= gbe_rxdat;
+
+	   if (time_r[7] && rxdv) begin // get command from first 1-2 data bytes of packet
+	      if (gbe_rxcount == 16'd4407) begin  // tuned to handle weird .5 sec rxdv case after Reset.
+	         ovfl_packet <= ovfl_packet + 1'b1; // tracks when a rx packet times-out, over jumbo GbE limit
+	         rx_timeout <= 1'b1;  // only set for pretty big jumbo packet, over 8810 bytes
+	      end
+	      else gbe_rxcount <= gbe_rxcount + 1'b1;
+
+	      if (cmd_code != 16'hf7f7) rx_adr_r[10:0] <= 11'h000;
+	      else if (cycle4) rx_adr_r <= rx_adr;
+
+	      if (rx_timeout) begin
+		 rx_adr <= 0;
+		 tx_adr <= 0;
+	      end
+
+// JGhere, Break down GbE packet Rx from the PC:
+	      if ( rx_timeout | event_done_r | dump_done_r ) begin
+		 cmd_code <= 16'h0000;
+		 dump_loop_i <= 0;
+		 nbx_i <= 0;
+		 cycle4 <= 0;
+		 cmd_f7f7 <= 0;
+	      end
+	      else if ( (gbe_rxcount == 16'h0003) && (cmd_code == 16'h0000)  ) begin
+		 if ( (gbe_rxdat&16'hf0f0)==16'hf0f0 && (gbe_rxdat&16'h0f0f)!=16'h0f0f ) begin
+		    cmd_code <= gbe_rxdat; //   ^^^ make sure cmd code looks valid ^^^
+		    prev_cmd[0] <= gbe_rxdat;
+		    prev_cmd[1] <= prev_cmd[0];
+		    prev_cmd[2] <= prev_cmd[1];
+		    prev_cmd[3] <= prev_cmd[2];
+		    good_rx_cmd <= 1'b1;
+		    rx_adr[10:0] <= 11'h000;
+		    cycle4 <= 0;
+		    cmd_f7f7 <= 0;
+		 end
+	      end
+	      else if ( |cmd_code && (gbe_rxcount == 16'h0004)) begin
+		 if (cmd_code == 16'hFDFD) dump_loop_i <= (gbe_rxdat[3:0]==4'hC);
+		 else dump_loop_i <= 0;
+		 if (cmd_code == 16'hFEFE) nbx_i <= (gbe_rxdat[7:0]);
+		 else nbx_i <= 0;
+		 if ( (cmd_code == 16'hf3f3 || cmd_code == 16'hf7f7) && (gbe_rxdat[11:8] == 4'h0) ) bk_adr <= gbe_rxdat[11:0];
+		 else bk_adr <= 0;
+		 data_iram[15:0] <= 16'hdddd;
+	      end
+	      else if (gbe_rxcount > 16'h0004 && (cmd_code == 16'hf7f7) && (bk_adr <= BRAM_LIM) ) begin
+		 if (gbe_rxcount == 16'h0005) cmd_f7f7 <= (cmd_code == 16'hf7f7);
+		 cycle4 <= (cmd_f7f7 & (rx_adr[1:0] == 2'h3)); // cannot begin before rx_count=6
+		 if (rx_adr != 11'h7ff) rx_adr <= rx_adr + 1'b1;
+		 else cmd_f7f7 <= 0;
+
+		 if (rx_adr[1:0] == 2'h0) data_iram[15:0] <= gbe_rxdat[15:0];
+		 else if (rx_adr[1:0] == 2'h1) data_iram[31:16] <= gbe_rxdat[15:0];
+		 else if (rx_adr[1:0] == 2'h2) data_iram[47:32] <= gbe_rxdat[15:0];
+		 else data_iram[63:48] <= gbe_rxdat[15:0];
+	      end
+	      else begin
+		 good_rx_cmd <= 1'b0;
+		 cycle4 <= 0;
+	      end // else: !if(gbe_rxcount == 3 or 4, or cmd=f7f7)
+	   end  // if (time_r[7] & rxdv & correct switch state)
+
+	   else  begin  // if (rxdv == 0) or time_r[7]==0
+	      gbe_rxcount <= 16'h0000;
+	      rx_timeout <= 1'b0;
+	      cycle4 <= 0;
+	      cmd_f7f7 <= 0;
+	   end
+
+	end // else: !if(gtx_reset)
      end
+
+   always @(*)
+     begin
+  	if (data_state == 2'h1) begin  // <-- last "counter_send" is in time with data_state 1
+	   tx_out[15:0] = crc_out[15:0];  // send out CRC "MSB-first"; it's already inverted and backwards
+	   tx_kout = 2'h0;
+	end
+	else if (data_state == 2'h2) begin
+	   tx_out[15:0] = crc_out[31:16];
+	   tx_kout = 2'h0;
+	end
+	else if (data_state == 2'h3) begin
+	   tx_out[15:0] = 16'hf7fd; // eof code
+	   tx_kout = 2'h3;
+	end
+	else begin    // tx_out control returns to gbe_txdat w/Idles
+	   tx_out[15:0] = gbe_txdat[15:0];
+	   tx_kout = gbe_kout;
+	end
+     end  // always @ (*)
+
+
+GBE_T20R20 gbe_gtx (
+        gbe_refck,     // GTX0_DOUBLE_RESET_CLK_IN,
+    //---------------------- Loopback and Powerdown Ports ----------------------
+        low[2:0],//  GTX0_LOOPBACK_IN,
+        low[1:0],//  GTX0_RXPOWERDOWN_IN,
+    //--------------------- Receive Ports - 8b10b Decoder ----------------------
+        rx_comma,  //  GTX0_RXCHARISCOMMA_OUT,  ***1
+        rxer[1:0], //  GTX0_RXCHARISK_OUT,  ***2
+        rxer[3:2], //  GTX0_RXDISPERR_OUT,  ***3
+        rxer[5:4], //  GTX0_RXNOTINTABLE_OUT,  ***4
+        rx_disp,   //  GTX0_RXRUNDISP_OUT,  ***5
+    //----------------- Receive Ports - Clock Correction Ports -----------------
+        ignore[2:0], //  GTX0_RXCLKCORCNT_OUT,
+    //------------- Receive Ports - Comma Detection and Alignment --------------
+        comma_align,   //   GTX0_RXENMCOMMAALIGN_IN,
+        comma_align,   //   GTX0_RXENPCOMMAALIGN_IN,
+    //----------------- Receive Ports - RX Data Path interface -----------------
+        gbe_rxdat,    // GTX0_RXDATA_OUT,  compare to count_out
+        !txoutclk_mmcm_lk,   //   GTX0_RXRESET_IN,  // hold reset until rxPLL and tx_usrclk are locked
+        gbe_txclk2,   //   GTX0_RXUSRCLK2_IN,
+    //----- Receive Ports - RX Driver,OOB signalling,Coupling and Eq.,CDR ------
+        ignore[3], //  GTX0_RXELECIDLE_OUT,
+        gbe_rxn,   //  GTX0_RXN_IN,
+        gbe_rxp,   //  GTX0_RXP_IN,
+    //------ Receive Ports - RX Elastic Buffer and Phase Alignment Ports -------
+        reset,       // GTX0_RXBUFRESET_IN,  // don't need this one
+        rx_bufstat,  // GTX0_RXBUFSTATUS_OUT,  --ignore these in RxDV?
+    //------------- Receive Ports - RX Loss-of-sync State Machine --------------
+        rx_lostsync, //  GTX0_RXLOSSOFSYNC_OUT,  *** 6    Use this where???
+    //---------------------- Receive Ports - RX PLL Ports ----------------------
+        reset,     //  GTX0_GTXRXRESET_IN,  // should use this one
+        ckgbe,     //  GTX0_MGTREFCLKRX_IN,
+        zero,      //  GTX0_PLLRXRESET_IN,  // should not use this one
+        rxpll_lk,  //  GTX0_RXPLLLKDET_OUT,
+        rx_resetdone,  //  GTX0_RXRESETDONE_OUT,
+    //-------------- Transmit Ports - 8b10b Encoder Control Ports --------------
+        zero2,       //  GTX0_TXCHARDISPMODE_IN,  ***7
+        zero2,       //  GTX0_TXCHARDISPVAL_IN,  ***8
+        tx_kout_r,   //  GTX0_TXCHARISK_IN,  ***9
+    //----------------------- Transmit Ports - GTX Ports -----------------------
+        low[12:0],   //  GTX0_GTXTEST_IN,
+    //---------------- Transmit Ports - TX Data Path interface -----------------
+        tx_out_r,    //  GTX0_TXDATA_IN,
+        gbe_tx_outclk,   //  GTX0_TXOUTCLK_OUT,
+        !rxpll_lk,   //  GTX0_TXRESET_IN,  // hold reset until rxPLL is locked!!!
+        gbe_txclk2,     //  GTX0_TXUSRCLK2_IN,
+    //-------------- Transmit Ports - TX Driver and OOB signaling --------------
+        gbe_txn,   //  GTX0_TXN_OUT,
+        gbe_txp,   //  GTX0_TXP_OUT,
+    //--------------------- Transmit Ports - TX PLL Ports ----------------------
+        reset,     //  GTX0_GTXTXRESET_IN,  // should use this one
+        tx_resetdone //  GTX0_TXRESETDONE_OUT
+	);
+
+
+
+
+
+
 
 
 
@@ -1421,120 +1803,56 @@ module CSC_GEM_Emulator(
 	led_low[2] = qpll_lock;    // always ON!   was !_ccb_rx[31] == _alct_adb_pulse_async
 	led_low[3] = qpll_lock_lost; // always OFF?  was _ccb_rx[35] == mpc_in1, always ON
 	led_low[4] = lhc_clk;
-//	led_low[5] = !_ccb_rx[12];   // L1accept
-//	led_low[6] = trigger;      // OR of several trigger pulse inputs
-	led_low[7] = (reset);    // just reset, includes ccb_rx[1]==L1reset
-//	led_low[0] = sw[8];  // on    to TMB FP LEDs.  is this LED[7:0]? Prom D[7:0] should control on-TMB LEDs.
-//	led_low[1] = sw[7];  // off
-//	led_low[2] = !pb;     // on w/pb.   change to reset?  can we use CCB_Resync?
-//	led_low[4] = synced_snapr; // on  // == RX_SYNC_DONE
 	led_low[5] = ck160_locked; // always ON!  // Tx GTX PLL Ref lock
 	led_low[6] = !ck160_locklost; // --> ON!  comes from mmcm driven by tx_pll_ck160 in FPGA
-//	led_low[7] = qpll_lock;    // on
+	led_low[7] = lhc_clk;    // just reset, includes ccb_rx[1]==L1reset
+
+	led_hi[8] = !(hold_bit | gtx_reset); // M1: synced with PB & errors at crate Rx
+	led_hi[9] = qpll_lock_lost;// 0
+	led_hi[10] = !cmd_code[7]; //!gtx_reset; // 0
+ 	led_hi[11] = !rd_ptr[8]; // ~6.25 usec  // gtx_ready;  // 1
+	led_hi[12] = !dump_enable_rr; // 12.5 usec // !ck160_locklost; // 0
+	led_hi[13] = !dump_enable_r;  // 12.5 usec // (locked & lhc_locked); // 1
+	led_hi[14] = !dump_enable;     // 12.5 usec
+	led_hi[15] = !dump_done; // 50ns
+
 	if (!sw[7]) begin
 	   if (sw[8] == 1) begin // sw8 ON, 7 OFF:  send err_count at 1.6 Hz; PB is Reset  (good to use at OSU)
-	      led_hi[8] = synced_snapr;  // Mezz1: HI
-	      led_hi[9] = !gtx_reset; // M1: synced with errors at crate Rx.  Low for 12.6 usec, irregular, very common.
- 	      led_hi[10] = gtx_ready; // M1: synced with errors at crate Rx.  Low for 12.6 usec, irregular, very common.
-	      led_hi[11] = !reset;    // M1: HI
-	      led_hi[12] = lhc_clk;   // M1: Good!
-	      led_hi[13] = (locked & lhc_locked); // M1: 
-	      led_hi[14] = slwclk;
-	      led_hi[15] = !ck160_locklost;   // M1: 
-	      //test_led[6:5] = 0;//
-/*
-	      test_led[1] = tx_begin;  // M1: always HI; Lo @RST.  CHECK.  best for !sw7 case
-	      test_led[2] = qpll_ck40;      // M1: Good.
-	      test_led[3] = tx_fc;     // M1: 3.2usec between 12.5ns pulses.   == LTNCY_TRIG: 199ns to rx_fc
-	      test_led[4] = synced_snapr; // M1: always HI.  == RX_SYNC_DONE
-	      test_led[5] = rx_strt;   // M1: always LO; 200/225ns pulse after RST.  CHECK.
-	      test_led[6] = !ck160_locklost; // M1: always HI.  this comes from mmcm driven by tx_pll_ck160
-	      test_led[7] = rx_valid;  // M1: always HI; Lo @RST.  CHECK.
-	      test_led[8] = qpll_lock; // M1: always HI.    was snap_wait
-*/
-	      //test_led[7] = reset;   // 
-	      //test_led[8] = bc0_led; // 
+//	      led_hi[9] = !gtx_reset; // M1: synced with errors at crate Rx.  Low for 12.6 usec, irregular, very common.
+//	      led_hi[10] = gtx_ready; // M1: synced with errors at crate Rx.  Low for 12.6 usec, irregular, very common.
+//	      led_hi[11] = !reset;    // M1: HI
+//	      led_hi[12] = lhc_clk;   // M1: Good!
+//	      led_hi[13] = (locked & lhc_locked); // M1: 
+//	      led_hi[14] = slwclk;
+//	      led_hi[15] = !ck160_locklost;   // M1: 
  	      test_led[9] = bc0;     // 
 	      test_led[10]  = bc0_r3; // 
-//	      led_low = 0;
 	   end
-// tx_begin (!sw7), tx_fc, rx_strt, rx_valid, rx_match
 
-// JGhere, add 7 signals to 0,0 case: ccb_cmdstrb & lhc_clk & ccb_cmd[0], tmb_cfg_out, alct_cfg_out, ccb_datstrb & ccb_data[0]?
-//                                    
 	   else begin            // Both OFF: send comp_dout when non-zero; PB is Reset  (good to use at OSU)
-	      led_hi[12:8] = ~gempad_r[4:0];
-	      led_hi[13] = locked;    // M1: HI
-	      led_hi[14] = slwclk;
-	      led_hi[15] = lock40 & (q!=2'b01);    // M1: synced with errors at crate Rx.  Low for 12.6 usec, irregular, very common.
-//	      test_led[2] = lhc_clk;        // * used to check lhc_clk freq.
-	      //test_led[5] = 0;  // rx_strt;   // CHECK.  *happens while Rawin=HI w/big negative glitch (starts ~4.2ns before clock, lasts ~6ns)
-	      //test_led[6] = 0;  // 
-	      //test_led[7] = reset;   // 
-	      //test_led[8] = bc0_led; // 
+//	      led_hi[13] = locked;    // M1: HI
+//	      led_hi[14] = slwclk;
+//	      led_hi[15] = lock40 & (q!=2'b01);    // M1: synced with errors at crate Rx.  Low for 12.6 usec, irregular, very common.
  	      test_led[9] = bc0;     // 
 	      test_led[10]  = bc0_r3; // 
-
-/*	      test_led[8:1]   = rxdvr_snap[7:0];
-	      test_led[9] = snap_wait; //
- */
-//	      led_low = 8'b11111111;   // Prom D[7:0], go to TMB LEDs
 	   end
 	end
 	else if (sw[8] == 0) begin  // *** sw7 ON from here on: send comp_dout when non-zero; PB forces a triad pattern
 	   //	                               (for Tx tester at TAMU)
 // Mezz LEDs are inverted...TMB FP LEDs are not...test_leds are not.
-	   led_hi[14:8] = geminfo_r[6:0];
-	   led_hi[15] = !(ck160_locked & (q!=2'b01)); // comment
-//	   test_led[1] = in_ratloop[13];   // push_fifo;  // 2nd.  9 ~7ns Hi pulses @25ns spacing   used at OSU
-//	   test_led[2] = rawin_ratloop[13]; // save_triad; // 1st.  Hi for 225ns, starting ~20ns before PushFIFO  used at OSU
-//	   test_led[3] = err_ratloop[13];  // send_triad; // 3rd.  Hi ~702ns, starting ~158ns after SaveTriad.   used at OSU
-//	   test_led[1] = push_fifo;  // 2nd.  9 ~7ns Hi pulses @25ns spacing   used at OSU
-	     // ^^  Add WIRE.  Trigger all the time!
-//	   test_led[2] = save_triad; // 1st.  Hi for 225ns, starting ~20ns before PushFIFO   used at OSU
-//	   test_led[3] = send_triad; // 3rd.  Hi ~702ns, starting ~158ns after SaveTriad.   used at OSU
-	     // ^^  CHECK.  32ns low pulse every 730ns!
-//	   test_led[4] = lhc_clk; // clk 40 from Mezz QPLL, CLEAN clk, random phase from LHC Clock
-	   //test_led[5] = 0;
-//	   test_led[5] = rx_strt;   // change?  LOW   used at OSU
-//	   test_led[6] = no_comp_dav;  // * LOW    used at OSU
-	   //test_led[6] = 0;
-	   //test_led[7] = reset;   // 
-	   //test_led[8] = bc0_led; // 
  	   test_led[9] = bc0;     // 
 	   test_led[10]  = bc0_r3; // 
 	end    // if (sw[8] == 0)
 	else begin  // Both ON: send err_count at 1.6 Hz; PB forces an error (use w/Tx tester at TAMU)
-//WHF switching these bits
-//	      led_hi[8] = !ck160_rst;   // M1: 
-//	      led_hi[9] = !(hold_bit | gtx_reset); // M1: synced with PB & errors at crate Rx
-// 	      led_hi[10] = time_40r[7]; // M1: 
-//	      led_hi[11] = synced_snapt;// M1: 
-//	      led_hi[12] = !qpll_lock_lost;// M1: HI
-//	      led_hi[13] = (locked & lhc_locked);  // M1: 
-//	      led_hi[14] = lhc_ck;
-//	      led_hi[15] = lock40;    //  M1: 
-///////////
-              led_hi[8] = ck160_rst;   // M1: 
-              led_hi[9] = (hold_bit | gtx_reset); // M1: synced with PB & errors at crate Rx
-              led_hi[10] = !time_40r[7]; // M1: 
-              led_hi[11] = !synced_snapt;// M1: 
-              led_hi[12] = qpll_lock_lost;// M1: HI
-              led_hi[13] = !(locked & lhc_locked);  // M1: 
-              led_hi[14] = !lhc_ck;
-              led_hi[15] = !lock40;    //  M1: 
-///////////
-
-	      //test_led[6:5] = 0;  //
-/*
-	      test_led[1] = tx_begin;  //  CHECK.  best for !sw7 case
-	      test_led[3] = tx_fc;     // CHECK.
-*/
-	      //test_led[7] = tx_begin[2];  // 
-	      //test_led[8] = tx_fc[2]; // 
- 	      test_led[9] = bc0;      // 
+ 	      test_led[9] = lhc_ck;      //  JGhere, only here to prevent compiler error (otherwise unused)
 	      test_led[10]  = bc0_r3; // 
-//	      led_low = 8'b11111111;  // Prom D[7:0], go to TMB LEDs
+//              led_hi[9] = (hold_bit | gtx_reset); // M1: synced with PB & errors at crate Rx
+//              led_hi[10] = !time_40r[7]; // M1: 
+//              led_hi[11] = !synced_snapt;// M1: 
+//              led_hi[12] = qpll_lock_lost;// M1: HI
+//              led_hi[13] = !(locked & lhc_locked);  // M1: 
+//              led_hi[14] = !lhc_ck;
+//             led_hi[15] = !lock40;    //  M1: 
 	end
      end
 
@@ -1543,14 +1861,47 @@ module CSC_GEM_Emulator(
 
    SRL16E #(.INIT(16'h0FFF)) SRL16MMCM(.Q(ck160_rst), .A0(1'b1), .A1(1'b1), .A2(1'b1), .A3(1'b1), .CE (ck160_locked), .CLK(qpll_ck40), .D(1'b0));
 
-// JGhere, snap12 GTX clock section, only need one?  6 of the 7 fibers have dummies for TRG_TxOutCLK.
-//     mmcm from 80 MHz:                    In,    out80,   out160,     reset,       locked-TOGGLES!
-//     MGT_JGUSRCLK_SOURCE_MMCM snap_mmcm (tx_clk_out, tx_clk, snap_clk2, ck160_rst, lock40); // from Tx GTX PLL out clk
-//     mmcm from 80 MHz:         In,    out80,  out160,   out40,   reset,       locked
-   bufg_x2div2 snap_mmcm (tx_clk_out, tx_clk, snap_clk2, ck40, !ck160_locked, lock40); // from Tx GTX PLL out clk
+//     mmcm from 80 MHz:               In,    out80,  out160,   out40,   reset,       locked
+//   bufg_x2div2 snap_mmcm (tx_clk_out, tx_clk, snap_clk2, ck40, !ck160_locked, lock40); // from Tx GTX PLL out clk
+//     mmcm from 80 MHz:                 In,    out80,  out160,   out40,   reset,       locked,   out40-no-bufg
+   bufg_x2div2plus snap_mmcm (tx_clk_out, tx_clk, snap_clk2, ck40, !ck160_locked, lock40, ck40buf); // from Tx GTX PLL out clk
 
 // JGhere, fiber Tx "from DCFEB" section:
 //   was Snap12 module, not cfeb-tmb test code
+   tmb_fiber_out  gem0out (
+	.RST (reset),   // Manual only
+	.TRG_SIGDET (), // from IPAD to IBUF.  N/A?
+	.TRG_RX_N (),   // empty
+	.TRG_RX_P (),   // empty
+	.TRG_TDIS (),   // OBUF output, for what?  N/A?
+	.TRG_TX_N (txn[0]),   // pick a fiber
+	.TRG_TX_P (txp[0]),   // pick a fiber
+	.G1C (fiber_out[0][7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+	.G2C (fiber_out[0][15:8]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
+	.G3C (fiber_out[0][23:16]), //   but good for testing low-rate non-zero triad data:
+	.G4C (fiber_out[0][31:24]),
+	.G5C (fiber_out[0][39:32]),
+	.G6C (fiber_out[0][47:40]),
+	.TRG_TX_REFCLK (ck160),  // QPLL 160 from MGT clk
+	.TRG_TXUSRCLK (snap_clk2),  // get 160 from TXOUTCLK (times 2)
+	.TRG_CLK80 (tx_clk),     // get 80 from TXOUTCLK
+	.TRG_GTXTXRST (txpll_rst),   // maybe Manual "reset" only
+	.TRG_TX_PLLRST (txpll_rst),  //  Tie LOW.
+	.TRG_RST (fiber_reset),       // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
+	.ENA_TEST_PAT (sw[8]),   // HIGH for PRBS!  (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+	.INJ_ERR (ferr_f[0] & sw[8]),  // use my switch/PB combo logic for this, high-true? Pulse high once.
+	.TRG_SD (),          // from IBUF, useless output. N/A
+	.TRG_TXOUTCLK (),   // 80 MHz; This has to go to MCM to generate 160/80
+	.TRG_TX_PLL_LOCK (), // inverse holds the MCM in Reset  // Tx GTX PLL Ref lock
+	.TRG_TXRESETDONE (), // N/A
+	.TX_SYNC_DONE (),    // not used in DCFEB tests
+	.STRT_LTNCY (tx_begin[0]),  // after every Reset, to TP for debug only  -- !sw7 ?
+	.LTNCY_TRIG (tx_fc[0]),     // bring out to TP.  Signals when TX sends "FC" (once every 128 BX).  Send raw to TP  --sw8,7
+	.MON_TX_SEL (),      //  N/A
+	.MON_TRG_TX_ISK (),  //  N/A returns 4 bits
+	.MON_TRG_TX_DATA ()  //  N/A returns 32 bits
+	);
+
    tmb_fiber_out  dcfeb1out (
 	.RST (reset),   // Manual only
 	.TRG_SIGDET (), // from IPAD to IBUF.  N/A?
@@ -1559,18 +1910,18 @@ module CSC_GEM_Emulator(
 	.TRG_TDIS (),   // OBUF output, for what?  N/A?
 	.TRG_TX_N (txn[1]),   // pick a fiber
 	.TRG_TX_P (txp[1]),   // pick a fiber
-	.G1C (8'b0),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-	.G2C (8'b0),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
-	.G3C (8'b0), //   but good for testing low-rate non-zero triad data:
-	.G4C (8'b0),
-	.G5C (8'b0),
-	.G6C (8'b0),
+	.G1C (fiber_out[1][7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+	.G2C (fiber_out[1][15:8]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
+	.G3C (fiber_out[1][23:16]), //   but good for testing low-rate non-zero triad data:
+	.G4C (fiber_out[1][31:24]),
+	.G5C (fiber_out[1][39:32]),
+	.G6C (fiber_out[1][47:40]),
 	.TRG_TX_REFCLK (ck160),  // QPLL 160 from MGT clk
 	.TRG_TXUSRCLK (snap_clk2),  // get 160 from TXOUTCLK (times 2)
 	.TRG_CLK80 (tx_clk),     // get 80 from TXOUTCLK
 	.TRG_GTXTXRST (txpll_rst),   // maybe Manual "reset" only
 	.TRG_TX_PLLRST (txpll_rst),  //  Tie LOW.
-	.TRG_RST (gtx_reset),       // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
+	.TRG_RST (fiber_reset),       // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
 	.ENA_TEST_PAT (sw[8]),   // HIGH for PRBS!  (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
 	.INJ_ERR (ferr_f[1] & sw[8]),  // use my switch/PB combo logic for this, high-true? Pulse high once.
 	.TRG_SD (),          // from IBUF, useless output. N/A
@@ -1593,24 +1944,18 @@ module CSC_GEM_Emulator(
 	.TRG_TDIS (),   // OBUF output, for what?  N/A?
 	.TRG_TX_N (txn[2]),   // pick a fiber
 	.TRG_TX_P (txp[2]),   // pick a fiber
-//	.G1C (8'b0),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-//	.G2C (8'b0),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
-//	.G3C (8'b0), //   but good for testing low-rate non-zero triad data:
-//	.G4C (8'b0),
-//	.G5C (8'b0),
-//	.G6C (8'b0),
-	.G1C (triad_word_l1[7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-	.G2C (triad_word_l2[7:0]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
-	.G3C (triad_word_l3[7:0]), //   but good for testing low-rate non-zero triad data:
-	.G4C (triad_word_l4[7:0]),
-	.G5C (triad_word_l5[7:0]),
-	.G6C (triad_word_l6[7:0]),
+	.G1C (fiber_out[2][7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+	.G2C (fiber_out[2][15:8]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
+	.G3C (fiber_out[2][23:16]), //   but good for testing low-rate non-zero triad data:
+	.G4C (fiber_out[2][31:24]),
+	.G5C (fiber_out[2][39:32]),
+	.G6C (fiber_out[2][47:40]),
 	.TRG_TX_REFCLK (ck160),  // QPLL 160 from MGT clk
 	.TRG_TXUSRCLK (snap_clk2),  // get 160 from TXOUTCLK (times 2)
 	.TRG_CLK80 (tx_clk),     // get 80 from TXOUTCLK
 	.TRG_GTXTXRST (0),   // maybe Manual "reset" only
 	.TRG_TX_PLLRST (0),  //  Tie LOW.
-	.TRG_RST (gtx_reset),       // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
+	.TRG_RST (fiber_reset),       // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
 	.ENA_TEST_PAT (sw[8]),   // HIGH for PRBS!  (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
 	.INJ_ERR (ferr_f[2] & sw[8]),  // use my switch/PB combo logic for this, high-true? Pulse high once.
 	.TRG_SD (),          // from IBUF, useless output. N/A
@@ -1633,18 +1978,18 @@ module CSC_GEM_Emulator(
 	.TRG_TDIS (),   // OBUF output, for what?  N/A?
 	.TRG_TX_N (txn[3]),   // pick a fiber
 	.TRG_TX_P (txp[3]),   // pick a fiber
-	.G1C (8'b0),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-	.G2C (8'b0),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
-	.G3C (8'b0), //   but good for testing low-rate non-zero triad data:
-	.G4C (8'b0),
-	.G5C (8'b0),
-	.G6C (8'b0),
+	.G1C (fiber_out[3][7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+	.G2C (fiber_out[3][15:8]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
+	.G3C (fiber_out[3][23:16]), //   but good for testing low-rate non-zero triad data:
+	.G4C (fiber_out[3][31:24]),
+	.G5C (fiber_out[3][39:32]),
+	.G6C (fiber_out[3][47:40]),
 	.TRG_TX_REFCLK (ck160),  // QPLL 160 from MGT clk
 	.TRG_TXUSRCLK (snap_clk2),  // get 160 from TXOUTCLK (times 2)
 	.TRG_CLK80 (tx_clk),     // get 80 from TXOUTCLK
 	.TRG_GTXTXRST (0),   // maybe Manual "reset" only
 	.TRG_TX_PLLRST (0),  //  Tie LOW.
-	.TRG_RST (gtx_reset),       // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
+	.TRG_RST (fiber_reset),       // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
 	.ENA_TEST_PAT (sw[8]),   // HIGH for PRBS!  (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
 	.INJ_ERR (ferr_f[3] & sw[8]),  // use my switch/PB combo logic for this, high-true? Pulse high once.
 	.TRG_SD (),          // from IBUF, useless output. N/A
@@ -1667,24 +2012,18 @@ module CSC_GEM_Emulator(
 	.TRG_TDIS (),   // OBUF output, for what?  N/A?
 	.TRG_TX_N (txn[4]),   // pick a fiber
 	.TRG_TX_P (txp[4]),   // pick a fiber
-//	.G1C (triad_word_l1[7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-//	.G2C (triad_word_l2[7:0]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
-//	.G3C (triad_word_l3[7:0]), //   but good for testing low-rate non-zero triad data:
-//	.G4C (triad_word_l4[7:0]),
-//	.G5C (triad_word_l5[7:0]),
-//	.G6C (triad_word_l6[7:0]),
-	.G1C (8'b0),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-	.G2C (8'b0),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
-	.G3C (8'b0), //   but good for testing low-rate non-zero triad data:
-	.G4C (8'b0),
-	.G5C (8'b0),
-	.G6C (8'b0),
+	.G1C (fiber_out[4][7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+	.G2C (fiber_out[4][15:8]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
+	.G3C (fiber_out[4][23:16]), //   but good for testing low-rate non-zero triad data:
+	.G4C (fiber_out[4][31:24]),
+	.G5C (fiber_out[4][39:32]),
+	.G6C (fiber_out[4][47:40]),
 	.TRG_TX_REFCLK (ck160),  // QPLL 160 from MGT clk
 	.TRG_TXUSRCLK (snap_clk2),  // get 160 from TXOUTCLK (times 2)
 	.TRG_CLK80 (tx_clk),     // get 80 from TXOUTCLK
 	.TRG_GTXTXRST (0),   // maybe Manual "reset" only
 	.TRG_TX_PLLRST (0),  //  Tie LOW.
-	.TRG_RST (gtx_reset),       // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
+	.TRG_RST (fiber_reset),       // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
 	.ENA_TEST_PAT (sw[8]),   // HIGH for PRBS!  (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
 	.INJ_ERR (ferr_f[4] & sw[8]),  // use my switch/PB combo logic for this, high-true? Pulse high once.
 	.TRG_SD (),          // from IBUF, useless output. N/A
@@ -1707,18 +2046,18 @@ module CSC_GEM_Emulator(
 	.TRG_TDIS (),   // OBUF output, for what?  N/A?
 	.TRG_TX_N (txn[5]),   // pick a fiber
 	.TRG_TX_P (txp[5]),   // pick a fiber
-	.G1C (8'b0),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-	.G2C (8'b0),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
-	.G3C (8'b0), //   but good for testing low-rate non-zero triad data:
-	.G4C (8'b0),
-	.G5C (8'b0),
-	.G6C (8'b0),
+	.G1C (fiber_out[5][7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+	.G2C (fiber_out[5][15:8]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
+	.G3C (fiber_out[5][23:16]), //   but good for testing low-rate non-zero triad data:
+	.G4C (fiber_out[5][31:24]),
+	.G5C (fiber_out[5][39:32]),
+	.G6C (fiber_out[5][47:40]),
 	.TRG_TX_REFCLK (ck160),  // QPLL 160 from MGT clk
 	.TRG_TXUSRCLK (snap_clk2),  // get 160 from TXOUTCLK (times 2)
 	.TRG_CLK80 (tx_clk),     // get 80 from TXOUTCLK
 	.TRG_GTXTXRST (0),   // maybe Manual "reset" only
 	.TRG_TX_PLLRST (0),  //  Tie LOW.
-	.TRG_RST (gtx_reset),       // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
+	.TRG_RST (fiber_reset),       // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
 	.ENA_TEST_PAT (sw[8]),   // HIGH for PRBS!  (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
 	.INJ_ERR (ferr_f[5] & sw[8]),  // use my switch/PB combo logic for this, high-true? Pulse high once.
 	.TRG_SD (),          // from IBUF, useless output. N/A
@@ -1741,18 +2080,18 @@ module CSC_GEM_Emulator(
 	.TRG_TDIS (),   // OBUF output, for what?  N/A?
 	.TRG_TX_N (txn[6]),   // pick a fiber
 	.TRG_TX_P (txp[6]),   // pick a fiber
-	.G1C (8'b0),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-	.G2C (8'b0),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
-	.G3C (8'b0), //   but good for testing low-rate non-zero triad data:
-	.G4C (8'b0),
-	.G5C (8'b0),
-	.G6C (8'b0),
+	.G1C (fiber_out[6][7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+	.G2C (fiber_out[6][15:8]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
+	.G3C (fiber_out[6][23:16]), //   but good for testing low-rate non-zero triad data:
+	.G4C (fiber_out[6][31:24]),
+	.G5C (fiber_out[6][39:32]),
+	.G6C (fiber_out[6][47:40]),
 	.TRG_TX_REFCLK (ck160),  // QPLL 160 from MGT clk
 	.TRG_TXUSRCLK (snap_clk2),  // get 160 from TXOUTCLK (times 2)
 	.TRG_CLK80 (tx_clk),     // get 80 from TXOUTCLK
 	.TRG_GTXTXRST (0),   // maybe Manual "reset" only
 	.TRG_TX_PLLRST (0),  //  Tie LOW.
-	.TRG_RST (gtx_reset),       // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
+	.TRG_RST (fiber_reset),       // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
 	.ENA_TEST_PAT (sw[8]),   // HIGH for PRBS!  (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
 	.INJ_ERR (ferr_f[6] & sw[8]),  // use my switch/PB combo logic for this, high-true? Pulse high once.
 	.TRG_SD (),          // from IBUF, useless output. N/A
@@ -1775,18 +2114,18 @@ module CSC_GEM_Emulator(
 	.TRG_TDIS (),   // OBUF output, for what?  N/A?
 	.TRG_TX_N (txn[7]),   // pick a fiber
 	.TRG_TX_P (txp[7]),   // pick a fiber
-	.G1C (8'b0),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-	.G2C (8'b0),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
-	.G3C (8'b0), //   but good for testing low-rate non-zero triad data:
-	.G4C (8'b0),
-	.G5C (8'b0),
-	.G6C (8'b0),
+	.G1C (fiber_out[7][7:0]),  // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+	.G2C (fiber_out[7][15:8]),  //   if ENA_TEST_PAT then it's prbs so these don't matter...
+	.G3C (fiber_out[7][23:16]), //   but good for testing low-rate non-zero triad data:
+	.G4C (fiber_out[7][31:24]),
+	.G5C (fiber_out[7][39:32]),
+	.G6C (fiber_out[7][47:40]),
 	.TRG_TX_REFCLK (ck160),  // QPLL 160 from MGT clk
 	.TRG_TXUSRCLK (snap_clk2),  // get 160 from TXOUTCLK (times 2)
 	.TRG_CLK80 (tx_clk),     // get 80 from TXOUTCLK
 	.TRG_GTXTXRST (0),   // maybe Manual "reset" only
 	.TRG_TX_PLLRST (0),  //  Tie LOW.
-	.TRG_RST (gtx_reset),       // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
+	.TRG_RST (fiber_reset),       // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
 	.ENA_TEST_PAT (sw[8]),   // HIGH for PRBS!  (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
 	.INJ_ERR (ferr_f[7] & sw[8]),  // use my switch/PB combo logic for this, high-true? Pulse high once.
 	.TRG_SD (),          // from IBUF, useless output. N/A
@@ -1802,6 +2141,7 @@ module CSC_GEM_Emulator(
 	);
 
 // JGhere, begin fiber Rx input section:
+/*
    comp_fiber_in dcfeb_in (
 	.CMP_RX_VIO_CNTRL (), // empty or Delete from code
 	.CMP_RX_LA_CNTRL (),  // empty or Delete from code
@@ -1813,40 +2153,26 @@ module CSC_GEM_Emulator(
 	.CMP_TX_N (),      // empty
 	.CMP_TX_P (),      // empty
         .CMP_RX_REFCLK (ck160), // QPLL 160 via GTX Clock
-        .CMP_SD (),        // from IBUF, useless output. N/A
-	.CMP_RX_CLK160 (rx_clk), //*7 Rx recovered clock out.  Use for now as Logic Fabric clock
+        .CMP_SD (),        // from IBUF, useless output. N/A 
+	.CMP_RX_CLK160 (rx_clk), //7 Rx recovered clock out.  Use for now as Logic Fabric clock
 			           //   Needed to sync all 7 CFEBs with Fabric clock!
-	.STRT_MTCH (rx_strt), //*7 gets set when the Start Pattern is present, N/A for Comp data.  To TP for debug.  --sw8,7
-	.VALID (rx_valid),    //*7 send this output to TP (only valid after StartMtch has come by)
-	.MATCH (rx_match),    //*7 send this output to TP  AND use for counting errors
+	.STRT_MTCH (rx_strt), //7 gets set when the Start Pattern is present, N/A for Comp data.  To TP for debug.  --sw8,7
+	.VALID (rx_valid),    //7 send this output to TP (only valid after StartMtch has come by)
+	.MATCH (rx_match),    //7 send this output to TP  AND use for counting errors
 			           // VALID="should match" when true, !MATCH is an error
-        .RCV_DATA (comp_dat),  //*7 48 bit comp. data output, send to GbE if |48  > 0
+        .RCV_DATA (comp_dat),  //7 48 bit comp. data output, send to GbE if |48  > 0
 		 	 //  keep 3 48-bit words now,  3 48-bit words before,  plus 3 48-bit words after
         .NONZERO_WORD (nz),
-        .CEW0 (word[0]),     //*7 access four phases of 40 MHz cycle...frame sep. out from GTX
+        .CEW0 (word[0]),     //7 access four phases of 40 MHz cycle...frame sep. out from GTX
         .CEW1 (word[1]),
         .CEW2 (word[2]),
-        .CEW3 (word[3]),     //*7 on CEW3_r (== CEW3 + 1) the RCV_DATA is valid, use to clock into pipeline
-        .LTNCY_TRIG (rx_fc), //*7 flags when RX sees "FC" for latency msm't.  Send raw to TP  --sw8,7
-        .RX_SYNC_DONE (synced_snapr) //*7  use inverse of this as Reset for GTXs etc?
+        .CEW3 (word[3]),     //7 on CEW3_r (== CEW3 + 1) the RCV_DATA is valid, use to clock into pipeline
+        .LTNCY_TRIG (rx_fc), //7 flags when RX sees "FC" for latency msm't.  Send raw to TP  --sw8,7
 	);
-
-// JGhere, begin fiber Rx data storage section *7:
-   fifo_48b_256_async comp_fifo (
-	.rst    (reset),
-	.wr_clk (rx_clk),        //*7
-	.rd_clk (ck125),
-	.din    (comp_dat_4r),   //*7
-	.wr_en  (push_fifo),     //*7
-	.rd_en  (JGhere),        //*7   The data needs to go someplace!
-	.dout   (comp_dout),     //*7
-	.full   (comp_overflow), //*7
-	.empty  (no_comp_dav)    //*7
-	);
-
-   assign snap_wait = !(synced_snapr & ck160_locked);  // allows pattern checks when RX is ready
+*/
 
 endmodule
+
 
 // file: bufg_div8clk.v
 // 
@@ -2024,26 +2350,28 @@ module bufg_div8clk
     .I   (clkout0));
 
 
-
-
 endmodule
 
 
 
 
+
+
+
+
 ///////////////////////////////////////////////////////////////////////////////
-//   ____  ____
-//  /   /\/   / 
-// /___/  \  /    Vendor: Xilinx 
+//   ____  ____ 
+//  /   /\/   /
+// /___/  \  /    Vendor: Xilinx
 // \   \   \/     Version : 1.8
-//  \   \         Application :  Virtex-6 FPGA GTX Transceiver Wizard
-//  /   /         Filename : mgt_jgusrclk_source_mmcm.v
-// /___/   /\     Timestamp : 
+//  \   \         Application : Virtex-6 FPGA GTX Transceiver Wizard
+//  /   /         Filename : gbe_t20r20.v
+// /___/   /\     
 // \   \  /  \ 
-//  \___\/\___\ 
+//  \___\/\___\
 //
 //
-// Module MGT_JGUSRCLK_SOURCE (for use with GTX Transceivers)
+// Module GBE_T20R20 (a GTX Wrapper)
 // Generated by Xilinx Virtex-6 FPGA GTX Transceiver Wizard
 // 
 // 
@@ -2096,102 +2424,812 @@ endmodule
 
 `timescale 1ns / 1ps
 
-//***********************************Entity Declaration*******************************
-module MGT_JGUSRCLK_SOURCE_MMCM #
+
+//***************************** Entity Declaration ****************************
+
+(* CORE_GENERATION_INFO = "GBE_T20R20,v6_gtxwizard_v1_8,{protocol_file=gigabit_ethernet}" *)
+module GBE_T20R20 #
 (
-    parameter   MULT            =   8.0,
-    parameter   DIVIDE          =   1,
-    parameter   CLK_PERIOD      =   12.5,
-    parameter   OUT0_DIVIDE     =   8.0,
-    parameter   OUT1_DIVIDE     =   4
+    // Simulation attributes
+    parameter   WRAPPER_SIM_GTXRESET_SPEEDUP    = 0    // Set to 1 to speed up sim reset
 )
 (
-    input           CLK_IN,
-    output          CLK0_OUT,
-    output          CLK1_OUT,
-    input           MMCM_RESET_IN,
-    output          MMCM_LOCKED_OUT
+    
+    //_________________________________________________________________________
+    //_________________________________________________________________________
+    //GTX0  (X0Y19)
+
+    input          GTX0_DOUBLE_RESET_CLK_IN,
+    //---------------------- Loopback and Powerdown Ports ----------------------
+    input   [2:0]   GTX0_LOOPBACK_IN,
+    input   [1:0]   GTX0_RXPOWERDOWN_IN,
+    //--------------------- Receive Ports - 8b10b Decoder ----------------------
+    output  [1:0]   GTX0_RXCHARISCOMMA_OUT,
+    output  [1:0]   GTX0_RXCHARISK_OUT,
+    output  [1:0]   GTX0_RXDISPERR_OUT,
+    output  [1:0]   GTX0_RXNOTINTABLE_OUT,
+    output  [1:0]   GTX0_RXRUNDISP_OUT,
+    //----------------- Receive Ports - Clock Correction Ports -----------------
+    output  [2:0]   GTX0_RXCLKCORCNT_OUT,
+    //------------- Receive Ports - Comma Detection and Alignment --------------
+    input           GTX0_RXENMCOMMAALIGN_IN,
+    input           GTX0_RXENPCOMMAALIGN_IN,
+    //----------------- Receive Ports - RX Data Path interface -----------------
+    output  [15:0]  GTX0_RXDATA_OUT,
+    input           GTX0_RXRESET_IN,
+    input           GTX0_RXUSRCLK2_IN,
+    //----- Receive Ports - RX Driver,OOB signalling,Coupling and Eq.,CDR ------
+    output          GTX0_RXELECIDLE_OUT,
+    input           GTX0_RXN_IN,
+    input           GTX0_RXP_IN,
+    //------ Receive Ports - RX Elastic Buffer and Phase Alignment Ports -------
+    input           GTX0_RXBUFRESET_IN,
+    output  [2:0]   GTX0_RXBUFSTATUS_OUT,
+    //------------- Receive Ports - RX Loss-of-sync State Machine --------------
+    output  [1:0]   GTX0_RXLOSSOFSYNC_OUT,
+    //---------------------- Receive Ports - RX PLL Ports ----------------------
+    input           GTX0_GTXRXRESET_IN,
+    input           GTX0_MGTREFCLKRX_IN,
+    input           GTX0_PLLRXRESET_IN,
+    output          GTX0_RXPLLLKDET_OUT,
+    output          GTX0_RXRESETDONE_OUT,
+    //-------------- Transmit Ports - 8b10b Encoder Control Ports --------------
+    input   [1:0]   GTX0_TXCHARDISPMODE_IN,
+    input   [1:0]   GTX0_TXCHARDISPVAL_IN,
+    input   [1:0]   GTX0_TXCHARISK_IN,
+    //----------------------- Transmit Ports - GTX Ports -----------------------
+    input   [12:0]  GTX0_GTXTEST_IN,
+    //---------------- Transmit Ports - TX Data Path interface -----------------
+    input   [15:0]  GTX0_TXDATA_IN,
+    output          GTX0_TXOUTCLK_OUT,
+    input           GTX0_TXRESET_IN,
+    input           GTX0_TXUSRCLK2_IN,
+    //-------------- Transmit Ports - TX Driver and OOB signaling --------------
+    output          GTX0_TXN_OUT,
+    output          GTX0_TXP_OUT,
+    //--------------------- Transmit Ports - TX PLL Ports ----------------------
+    input           GTX0_GTXTXRESET_IN,
+    output          GTX0_TXRESETDONE_OUT
+
+
 );
 
+//***************************** Wire Declarations *****************************
 
-`define DLY #1
-
-//*********************************Wire Declarations**********************************
-
-    wire    [15:0]  tied_to_ground_vec_i;
+    // ground and vcc signals
     wire            tied_to_ground_i;
-    wire            clkout0_i;
-    wire            clkout1_i;
-    wire            clkfbout_i;
+    wire    [63:0]  tied_to_ground_vec_i;
+    wire            tied_to_vcc_i;
+    wire    [63:0]  tied_to_vcc_vec_i;
+    wire            gtx0_gtxtest_bit1;
+    wire            gtx0_gtxtest_done;
+    wire    [12:0]  gtx0_gtxtest_i;
+    wire            gtx0_txreset_i;
+    wire            gtx0_rxreset_i;
+    wire            gtx0_rxplllkdet_i;
+ 
+//********************************* Main Body of Code**************************
 
-//*********************************** Beginning of Code *******************************
-
-    //  Static signal Assigments    
     assign tied_to_ground_i             = 1'b0;
-    assign tied_to_ground_vec_i         = 16'h0000;
+    assign tied_to_ground_vec_i         = 64'h0000000000000000;
+    assign tied_to_vcc_i                = 1'b1;
+    assign tied_to_vcc_vec_i            = 64'hffffffffffffffff;
 
-    // Instantiate a MMCM module to divide the reference clock. Uses internal feedback
-    // for improved jitter performance, and to avoid consuming an additional BUFG
-    MMCM_ADV #
+    assign gtx0_gtxtest_i          = {11'b10000000000,gtx0_gtxtest_bit1,1'b0};
+    assign gtx0_txreset_i          = gtx0_gtxtest_done || GTX0_TXRESET_IN;
+    assign gtx0_rxreset_i          = gtx0_gtxtest_done || GTX0_RXRESET_IN;
+    assign GTX0_RXPLLLKDET_OUT     = gtx0_rxplllkdet_i;
+
+//------------------------- GTX Instances  -------------------------------
+
+
+
+    //_________________________________________________________________________
+    //_________________________________________________________________________
+    //GTX0  (X0Y19)
+
+    GBE_T20R20_GTX #
     (
-         .COMPENSATION      ("ZHOLD"),
-         .CLKFBOUT_MULT_F   (MULT),
-         .DIVCLK_DIVIDE     (DIVIDE),
-         .CLKFBOUT_PHASE    (0),
-         .CLKIN1_PERIOD     (CLK_PERIOD),
-         .CLKOUT0_DIVIDE_F  (OUT0_DIVIDE),
-         .CLKOUT0_PHASE     (0),
-         .CLKOUT1_DIVIDE    (OUT1_DIVIDE),
-         .CLKOUT1_PHASE     (0),
-         .CLOCK_HOLD        ("FALSE")
+        // Simulation attributes
+        .GTX_SIM_GTXRESET_SPEEDUP   (WRAPPER_SIM_GTXRESET_SPEEDUP),
+        
+        // Share RX PLL parameter
+        .GTX_TX_CLK_SOURCE           ("RXPLL"),
+        // Save power parameter
+        .GTX_POWER_SAVE              (10'b0000110100)
     )
-    mmcm_adv_i   
+    gtx0_gbe_t20r20_i
     (
-         .CLKIN1            (CLK_IN),
-         .CLKIN2            (1'b0),
-         .CLKINSEL          (1'b1),
-         .CLKFBIN           (clkfbout_i),
-         .CLKOUT0           (clkout0_i),
-         .CLKOUT0B          (),
-         .CLKOUT1           (clkout1_i),
-         .CLKOUT1B          (),         
-         .CLKOUT2           (),
-         .CLKOUT2B          (),         
-         .CLKOUT3           (),
-         .CLKOUT3B          (),         
-         .CLKOUT4           (),
-         .CLKOUT5           (),
-         .CLKOUT6           (),
-         .CLKFBOUT          (clkfbout_i),
-         .CLKFBOUTB         (),
-         .CLKFBSTOPPED      (),
-         .CLKINSTOPPED      (),
-         .DO                (),
-         .DRDY              (),
-         .DADDR             (7'd0),
-         .DCLK              (1'b0),
-         .DEN               (1'b0),
-         .DI                (16'd0),
-         .DWE               (1'b0),
-         .LOCKED            (MMCM_LOCKED_OUT),
-         .PSCLK             (1'b0),
-         .PSEN              (1'b0),         
-         .PSINCDEC          (1'b0), 
-         .PSDONE            (),         
-         .PWRDWN            (1'b0),         
-         .RST               (MMCM_RESET_IN)
-    );
-    
-    BUFG clkout0_bufg_i  
-    ( .O (CLK0_OUT), 
-      .I (clkout0_i) ); 
+        //---------------------- Loopback and Powerdown Ports ----------------------
+        .LOOPBACK_IN                    (GTX0_LOOPBACK_IN),
+        .RXPOWERDOWN_IN                 (GTX0_RXPOWERDOWN_IN),
+        //--------------------- Receive Ports - 8b10b Decoder ----------------------
+        .RXCHARISCOMMA_OUT              (GTX0_RXCHARISCOMMA_OUT),
+        .RXCHARISK_OUT                  (GTX0_RXCHARISK_OUT),
+        .RXDISPERR_OUT                  (GTX0_RXDISPERR_OUT),
+        .RXNOTINTABLE_OUT               (GTX0_RXNOTINTABLE_OUT),
+        .RXRUNDISP_OUT                  (GTX0_RXRUNDISP_OUT),
+        //----------------- Receive Ports - Clock Correction Ports -----------------
+        .RXCLKCORCNT_OUT                (GTX0_RXCLKCORCNT_OUT),
+        //------------- Receive Ports - Comma Detection and Alignment --------------
+        .RXENMCOMMAALIGN_IN             (GTX0_RXENMCOMMAALIGN_IN),
+        .RXENPCOMMAALIGN_IN             (GTX0_RXENPCOMMAALIGN_IN),
+        //----------------- Receive Ports - RX Data Path interface -----------------
+        .RXDATA_OUT                     (GTX0_RXDATA_OUT),
+        .RXRESET_IN                     (gtx0_rxreset_i),
+        .RXUSRCLK2_IN                   (GTX0_RXUSRCLK2_IN),
+        //----- Receive Ports - RX Driver,OOB signalling,Coupling and Eq.,CDR ------
+        .RXELECIDLE_OUT                 (GTX0_RXELECIDLE_OUT),
+        .RXN_IN                         (GTX0_RXN_IN),
+        .RXP_IN                         (GTX0_RXP_IN),
+        //------ Receive Ports - RX Elastic Buffer and Phase Alignment Ports -------
+        .RXBUFRESET_IN                  (GTX0_RXBUFRESET_IN),
+        .RXBUFSTATUS_OUT                (GTX0_RXBUFSTATUS_OUT),
+        //------------- Receive Ports - RX Loss-of-sync State Machine --------------
+        .RXLOSSOFSYNC_OUT               (GTX0_RXLOSSOFSYNC_OUT),
+        //---------------------- Receive Ports - RX PLL Ports ----------------------
+        .GTXRXRESET_IN                  (GTX0_GTXRXRESET_IN),
+        .MGTREFCLKRX_IN                 ({tied_to_ground_i , GTX0_MGTREFCLKRX_IN}),
+        .PLLRXRESET_IN                  (GTX0_PLLRXRESET_IN),
+        .RXPLLLKDET_OUT                 (gtx0_rxplllkdet_i),
+        .RXRESETDONE_OUT                (GTX0_RXRESETDONE_OUT),
+        //-------------- Transmit Ports - 8b10b Encoder Control Ports --------------
+        .TXCHARDISPMODE_IN              (GTX0_TXCHARDISPMODE_IN),
+        .TXCHARDISPVAL_IN               (GTX0_TXCHARDISPVAL_IN),
+        .TXCHARISK_IN                   (GTX0_TXCHARISK_IN),
+        //----------------------- Transmit Ports - GTX Ports -----------------------
+        .GTXTEST_IN                     (gtx0_gtxtest_i),
+        //---------------- Transmit Ports - TX Data Path interface -----------------
+        .TXDATA_IN                      (GTX0_TXDATA_IN),
+        .TXOUTCLK_OUT                   (GTX0_TXOUTCLK_OUT),
+        .TXRESET_IN                     (gtx0_txreset_i),
+        .TXUSRCLK2_IN                   (GTX0_TXUSRCLK2_IN),
+        //-------------- Transmit Ports - TX Driver and OOB signaling --------------
+        .TXN_OUT                        (GTX0_TXN_OUT),
+        .TXP_OUT                        (GTX0_TXP_OUT),
+        //--------------------- Transmit Ports - TX PLL Ports ----------------------
+        .GTXTXRESET_IN                  (GTX0_GTXTXRESET_IN),
+        .MGTREFCLKTX_IN                 ({tied_to_ground_i , GTX0_MGTREFCLKRX_IN}),
+        .PLLTXRESET_IN                  (tied_to_ground_i),
+        .TXPLLLKDET_OUT                 (),
+        .TXRESETDONE_OUT                (GTX0_TXRESETDONE_OUT)
 
-    BUFG clkout1_bufg_i
-    ( .O (CLK1_OUT),
-      .I (clkout1_i) );
+    );
+
+
+    //--------------------------Logic to drive GTXTEST[1] -------------------------------
+     DOUBLE_RESET gtx0_double_reset_i
+     (
+        .CLK(GTX0_DOUBLE_RESET_CLK_IN),
+        .PLLLKDET(gtx0_rxplllkdet_i),
+        .GTXTEST_DONE(gtx0_gtxtest_done),
+        .GTXTEST_BIT1(gtx0_gtxtest_bit1)
+     );
+    
 
 endmodule
 
+    
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+//   ____  ____ 
+//  /   /\/   /
+// /___/  \  /    Vendor: Xilinx
+// \   \   \/     Version : 1.8
+//  \   \         Application : Virtex-6 FPGA GTX Transceiver Wizard
+//  /   /         Filename : gbe_t20r20_gtx.v
+// /___/   /\     Timestamp :
+// \   \  /  \ 
+//  \___\/\___\
+//
+//
+// Module GBE_T20R20_GTX (a GTX Wrapper)
+// Generated by Xilinx Virtex-6 FPGA GTX Transceiver Wizard
+// 
+// 
+// (c) Copyright 2009-2010 Xilinx, Inc. All rights reserved.
+// 
+// This file contains confidential and proprietary information
+// of Xilinx, Inc. and is protected under U.S. and
+// international copyright and other intellectual property
+// laws.
+// 
+// DISCLAIMER
+// This disclaimer is not a license and does not grant any
+// rights to the materials distributed herewith. Except as
+// otherwise provided in a valid license issued to you by
+// Xilinx, and to the maximum extent permitted by applicable
+// law: (1) THESE MATERIALS ARE MADE AVAILABLE "AS IS" AND
+// WITH ALL FAULTS, AND XILINX HEREBY DISCLAIMS ALL WARRANTIES
+// AND CONDITIONS, EXPRESS, IMPLIED, OR STATUTORY, INCLUDING
+// BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, NON-
+// INFRINGEMENT, OR FITNESS FOR ANY PARTICULAR PURPOSE; and
+// (2) Xilinx shall not be liable (whether in contract or tort,
+// including negligence, or under any other theory of
+// liability) for any loss or damage of any kind or nature
+// related to, arising under or in connection with these
+// materials, including for any direct, or any indirect,
+// special, incidental, or consequential loss or damage
+// (including loss of data, profits, goodwill, or any type of
+// loss or damage suffered as a result of any action brought
+// by a third party) even if such damage or loss was
+// reasonably foreseeable or Xilinx had been advised of the
+// possibility of the same.
+// 
+// CRITICAL APPLICATIONS
+// Xilinx products are not designed or intended to be fail-
+// safe, or for use in any application requiring fail-safe
+// performance, such as life-support or safety devices or
+// systems, Class III medical devices, nuclear facilities,
+// applications related to the deployment of airbags, or any
+// other applications that could lead to death, personal
+// injury, or severe property or environmental damage
+// (individually and collectively, "Critical
+// Applications"). Customer assumes the sole risk and
+// liability of any use of Xilinx products in Critical
+// Applications, subject only to applicable laws and
+// regulations governing limitations on product liability.
+// 
+// THIS COPYRIGHT NOTICE AND DISCLAIMER MUST BE RETAINED AS
+// PART OF THIS FILE AT ALL TIMES. 
+
+
+`timescale 1ns / 1ps
+
+
+//***************************** Entity Declaration ****************************
+
+module GBE_T20R20_GTX #
+(
+    // Simulation attributes
+    parameter   GTX_SIM_GTXRESET_SPEEDUP   =   0,      // Set to 1 to speed up sim reset
+    
+    // Share RX PLL parameter
+    parameter   GTX_TX_CLK_SOURCE          =   "TXPLL",
+    // Save power parameter
+    parameter   GTX_POWER_SAVE             =   10'b0000000000
+)
+(
+    //---------------------- Loopback and Powerdown Ports ----------------------
+    input   [2:0]   LOOPBACK_IN,
+    input   [1:0]   RXPOWERDOWN_IN,
+    //--------------------- Receive Ports - 8b10b Decoder ----------------------
+    output  [1:0]   RXCHARISCOMMA_OUT,
+    output  [1:0]   RXCHARISK_OUT,
+    output  [1:0]   RXDISPERR_OUT,
+    output  [1:0]   RXNOTINTABLE_OUT,
+    output  [1:0]   RXRUNDISP_OUT,
+    //----------------- Receive Ports - Clock Correction Ports -----------------
+    output  [2:0]   RXCLKCORCNT_OUT,
+    //------------- Receive Ports - Comma Detection and Alignment --------------
+    input           RXENMCOMMAALIGN_IN,
+    input           RXENPCOMMAALIGN_IN,
+    //----------------- Receive Ports - RX Data Path interface -----------------
+    output  [15:0]  RXDATA_OUT,
+    input           RXRESET_IN,
+    input           RXUSRCLK2_IN,
+    //----- Receive Ports - RX Driver,OOB signalling,Coupling and Eq.,CDR ------
+    output          RXELECIDLE_OUT,
+    input           RXN_IN,
+    input           RXP_IN,
+    //------ Receive Ports - RX Elastic Buffer and Phase Alignment Ports -------
+    input           RXBUFRESET_IN,
+    output  [2:0]   RXBUFSTATUS_OUT,
+    //------------- Receive Ports - RX Loss-of-sync State Machine --------------
+    output  [1:0]   RXLOSSOFSYNC_OUT,
+    //---------------------- Receive Ports - RX PLL Ports ----------------------
+    input           GTXRXRESET_IN,
+    input   [1:0]   MGTREFCLKRX_IN,
+    input           PLLRXRESET_IN,
+    output          RXPLLLKDET_OUT,
+    output          RXRESETDONE_OUT,
+    //-------------- Transmit Ports - 8b10b Encoder Control Ports --------------
+    input   [1:0]   TXCHARDISPMODE_IN,
+    input   [1:0]   TXCHARDISPVAL_IN,
+    input   [1:0]   TXCHARISK_IN,
+    //----------------------- Transmit Ports - GTX Ports -----------------------
+    input   [12:0]  GTXTEST_IN,
+    //---------------- Transmit Ports - TX Data Path interface -----------------
+    input   [15:0]  TXDATA_IN,
+    output          TXOUTCLK_OUT,
+    input           TXRESET_IN,
+    input           TXUSRCLK2_IN,
+    //-------------- Transmit Ports - TX Driver and OOB signaling --------------
+    output          TXN_OUT,
+    output          TXP_OUT,
+    //--------------------- Transmit Ports - TX PLL Ports ----------------------
+    input           GTXTXRESET_IN,
+    input   [1:0]   MGTREFCLKTX_IN,
+    input           PLLTXRESET_IN,
+    output          TXPLLLKDET_OUT,
+    output          TXRESETDONE_OUT
+
+
+);
+
+
+//***************************** Wire Declarations *****************************
+
+    // ground and vcc signals
+    wire            tied_to_ground_i;
+    wire    [63:0]  tied_to_ground_vec_i;
+    wire            tied_to_vcc_i;
+    wire    [63:0]  tied_to_vcc_vec_i;
+
+
+    //RX Datapath signals
+    wire    [31:0]  rxdata_i;
+    wire    [1:0]   rxchariscomma_float_i;
+    wire    [1:0]   rxcharisk_float_i;
+    wire    [1:0]   rxdisperr_float_i;
+    wire    [1:0]   rxnotintable_float_i;
+    wire    [1:0]   rxrundisp_float_i;
+
+
+    //TX Datapath signals
+    wire    [31:0]  txdata_i;           
+    wire    [1:0]   txkerr_float_i;
+    wire    [1:0]   txrundisp_float_i;
+        
+// 
+//********************************* Main Body of Code**************************
+                       
+    //-------------------------  Static signal Assigments ---------------------   
+
+    assign tied_to_ground_i             = 1'b0;
+    assign tied_to_ground_vec_i         = 64'h0000000000000000;
+    assign tied_to_vcc_i                = 1'b1;
+    assign tied_to_vcc_vec_i            = 64'hffffffffffffffff;
+    
+    //-------------------  GTX Datapath byte mapping  -----------------
+
+    assign  RXDATA_OUT    =   rxdata_i[15:0];
+
+    // The GTX transmits little endian data (TXDATA[7:0] transmitted first)     
+    assign  txdata_i    =   {tied_to_ground_vec_i[15:0],TXDATA_IN};
+
+
+
+
+
+    //------------------------- GTX Instantiations  --------------------------
+        GTXE1 #
+        (
+            //_______________________ Simulation-Only Attributes __________________
+    
+            .SIM_RECEIVER_DETECT_PASS   ("TRUE"),
+            
+            .SIM_TX_ELEC_IDLE_LEVEL     ("X"),
+    
+            .SIM_GTXRESET_SPEEDUP       (GTX_SIM_GTXRESET_SPEEDUP),
+            .SIM_VERSION                ("2.0"),
+            .SIM_TXREFCLK_SOURCE        (3'b000),
+            .SIM_RXREFCLK_SOURCE        (3'b000),
+            
+
+           //--------------------------TX PLL----------------------------
+            .TX_CLK_SOURCE                          (GTX_TX_CLK_SOURCE),
+            .TX_OVERSAMPLE_MODE                     ("FALSE"),
+            .TXPLL_COM_CFG                          (24'h21680a),
+            .TXPLL_CP_CFG                           (8'h0D),
+            .TXPLL_DIVSEL_FB                        (2),
+            .TXPLL_DIVSEL_OUT                       (2),
+            .TXPLL_DIVSEL_REF                       (1),
+            .TXPLL_DIVSEL45_FB                      (5),
+            .TXPLL_LKDET_CFG                        (3'b111),
+            .TX_CLK25_DIVIDER                       (5),
+            .TXPLL_SATA                             (2'b00),
+            .TX_TDCC_CFG                            (2'b00),
+            .PMA_CAS_CLK_EN                         ("FALSE"),
+            .POWER_SAVE                             (GTX_POWER_SAVE),
+
+           //-----------------------TX Interface-------------------------
+            .GEN_TXUSRCLK                           ("TRUE"),
+            .TX_DATA_WIDTH                          (20),
+            .TX_USRCLK_CFG                          (6'h00),
+            .TXOUTCLK_CTRL                          ("TXPLLREFCLK_DIV1"),
+            .TXOUTCLK_DLY                           (10'b0000000000),
+
+           //------------TX Buffering and Phase Alignment----------------
+            .TX_PMADATA_OPT                         (1'b0),
+            .PMA_TX_CFG                             (20'h80082),
+            .TX_BUFFER_USE                          ("TRUE"),
+            .TX_BYTECLK_CFG                         (6'h00),
+            .TX_EN_RATE_RESET_BUF                   ("TRUE"),
+            .TX_XCLK_SEL                            ("TXOUT"),
+            .TX_DLYALIGN_CTRINC                     (4'b0100),
+            .TX_DLYALIGN_LPFINC                     (4'b0110),
+            .TX_DLYALIGN_MONSEL                     (3'b000),
+            .TX_DLYALIGN_OVRDSETTING                (8'b10000000),
+
+           //-----------------------TX Gearbox---------------------------
+            .GEARBOX_ENDEC                          (3'b000),
+            .TXGEARBOX_USE                          ("FALSE"),
+
+           //--------------TX Driver and OOB Signalling------------------
+            .TX_DRIVE_MODE                          ("DIRECT"),
+            .TX_IDLE_ASSERT_DELAY                   (3'b100),
+            .TX_IDLE_DEASSERT_DELAY                 (3'b010),
+            .TXDRIVE_LOOPBACK_HIZ                   ("FALSE"),
+            .TXDRIVE_LOOPBACK_PD                    ("FALSE"),
+
+           //------------TX Pipe Control for PCI Express/SATA------------
+            .COM_BURST_VAL                          (4'b1111),
+
+           //----------------TX Attributes for PCI Express---------------
+            .TX_DEEMPH_0                            (5'b11010),
+            .TX_DEEMPH_1                            (5'b10000),
+            .TX_MARGIN_FULL_0                       (7'b1001110),
+            .TX_MARGIN_FULL_1                       (7'b1001001),
+            .TX_MARGIN_FULL_2                       (7'b1000101),
+            .TX_MARGIN_FULL_3                       (7'b1000010),
+            .TX_MARGIN_FULL_4                       (7'b1000000),
+            .TX_MARGIN_LOW_0                        (7'b1000110),
+            .TX_MARGIN_LOW_1                        (7'b1000100),
+            .TX_MARGIN_LOW_2                        (7'b1000010),
+            .TX_MARGIN_LOW_3                        (7'b1000000),
+            .TX_MARGIN_LOW_4                        (7'b1000000),
+
+           //--------------------------RX PLL----------------------------
+            .RX_OVERSAMPLE_MODE                     ("FALSE"),
+            .RXPLL_COM_CFG                          (24'h21680a),
+            .RXPLL_CP_CFG                           (8'h0D),
+            .RXPLL_DIVSEL_FB                        (2),
+            .RXPLL_DIVSEL_OUT                       (2),
+            .RXPLL_DIVSEL_REF                       (1),
+            .RXPLL_DIVSEL45_FB                      (5),
+            .RXPLL_LKDET_CFG                        (3'b111),
+            .RX_CLK25_DIVIDER                       (5),
+
+           //-----------------------RX Interface-------------------------
+            .GEN_RXUSRCLK                           ("TRUE"),
+            .RX_DATA_WIDTH                          (20),
+            .RXRECCLK_CTRL                          ("RXRECCLKPMA_DIV1"),
+            .RXRECCLK_DLY                           (10'b0000000000),
+            .RXUSRCLK_DLY                           (16'h0000),
+
+           //--------RX Driver,OOB signalling,Coupling and Eq.,CDR-------
+            .AC_CAP_DIS                             ("TRUE"),
+            .CDR_PH_ADJ_TIME                        (5'b10100),
+            .OOBDETECT_THRESHOLD                    (3'b011),
+            .PMA_CDR_SCAN                           (27'h640404C),
+            .PMA_RX_CFG                             (25'h05ce008),
+            .RCV_TERM_GND                           ("FALSE"),
+            .RCV_TERM_VTTRX                         ("FALSE"),
+            .RX_EN_IDLE_HOLD_CDR                    ("FALSE"),
+            .RX_EN_IDLE_RESET_FR                    ("TRUE"),
+            .RX_EN_IDLE_RESET_PH                    ("TRUE"),
+            .TX_DETECT_RX_CFG                       (14'h1832),
+            .TERMINATION_CTRL                       (5'b00000),
+            .TERMINATION_OVRD                       ("FALSE"),
+            .CM_TRIM                                (2'b01),
+            .PMA_RXSYNC_CFG                         (7'h00),
+            .PMA_CFG                                (76'h0040000040000000003),
+            .BGTEST_CFG                             (2'b00),
+            .BIAS_CFG                               (17'h00000),
+
+           //------------RX Decision Feedback Equalizer(DFE)-------------
+            .DFE_CAL_TIME                           (5'b01100),
+            .DFE_CFG                                (8'b00011011),
+            .RX_EN_IDLE_HOLD_DFE                    ("TRUE"),
+            .RX_EYE_OFFSET                          (8'h4C),
+            .RX_EYE_SCANMODE                        (2'b00),
+
+           //-----------------------PRBS Detection-----------------------
+            .RXPRBSERR_LOOPBACK                     (1'b0),
+
+           //----------------Comma Detection and Alignment---------------
+            .ALIGN_COMMA_WORD                       (2), // 1 == any byte.  2 == even byte.
+            .COMMA_10B_ENABLE                       (10'b0001111111),
+            .COMMA_DOUBLE                           ("FALSE"),
+            .DEC_MCOMMA_DETECT                      ("TRUE"),
+            .DEC_PCOMMA_DETECT                      ("TRUE"),
+            .DEC_VALID_COMMA_ONLY                   ("FALSE"),
+            .MCOMMA_10B_VALUE                       (10'b1010000011),
+            .MCOMMA_DETECT                          ("TRUE"),
+            .PCOMMA_10B_VALUE                       (10'b0101111100),
+            .PCOMMA_DETECT                          ("TRUE"),
+            .RX_DECODE_SEQ_MATCH                    ("TRUE"),
+            .RX_SLIDE_AUTO_WAIT                     (5),
+            .RX_SLIDE_MODE                          ("OFF"),
+            .SHOW_REALIGN_COMMA                     ("FALSE"),
+
+           //---------------RX Loss-of-sync State Machine----------------
+            .RX_LOS_INVALID_INCR                    (1),
+            .RX_LOS_THRESHOLD                       (4),
+            .RX_LOSS_OF_SYNC_FSM                    ("FALSE"),
+
+           //-----------------------RX Gearbox---------------------------
+            .RXGEARBOX_USE                          ("FALSE"),
+
+           //-----------RX Elastic Buffer and Phase alignment------------
+            .RX_BUFFER_USE                          ("TRUE"),
+            .RX_EN_IDLE_RESET_BUF                   ("TRUE"),
+            .RX_EN_MODE_RESET_BUF                   ("TRUE"),
+            .RX_EN_RATE_RESET_BUF                   ("TRUE"),
+            .RX_EN_REALIGN_RESET_BUF                ("FALSE"),
+            .RX_EN_REALIGN_RESET_BUF2               ("FALSE"),
+            .RX_FIFO_ADDR_MODE                      ("FULL"),
+            .RX_IDLE_HI_CNT                         (4'b1000),
+            .RX_IDLE_LO_CNT                         (4'b0000),
+            .RX_XCLK_SEL                            ("RXREC"),
+            .RX_DLYALIGN_CTRINC                     (4'b1110),
+            .RX_DLYALIGN_EDGESET                    (5'b00010),
+            .RX_DLYALIGN_LPFINC                     (4'b1110),
+            .RX_DLYALIGN_MONSEL                     (3'b000),
+            .RX_DLYALIGN_OVRDSETTING                (8'b10000000),
+
+           //----------------------Clock Correction----------------------
+            .CLK_COR_ADJ_LEN                        (2),
+            .CLK_COR_DET_LEN                        (2),
+            .CLK_COR_INSERT_IDLE_FLAG               ("FALSE"),
+            .CLK_COR_KEEP_IDLE                      ("FALSE"),
+            .CLK_COR_MAX_LAT                        (18),
+            .CLK_COR_MIN_LAT                        (14),
+            .CLK_COR_PRECEDENCE                     ("TRUE"),
+            .CLK_COR_REPEAT_WAIT                    (0),
+            .CLK_COR_SEQ_1_1                        (10'b0110111100),
+            .CLK_COR_SEQ_1_2                        (10'b0001010000),
+            .CLK_COR_SEQ_1_3                        (10'b0100000000),
+            .CLK_COR_SEQ_1_4                        (10'b0100000000),
+            .CLK_COR_SEQ_1_ENABLE                   (4'b1111),
+            .CLK_COR_SEQ_2_1                        (10'b0110111100),
+            .CLK_COR_SEQ_2_2                        (10'b0010110101),
+            .CLK_COR_SEQ_2_3                        (10'b0100000000),
+            .CLK_COR_SEQ_2_4                        (10'b0100000000),
+            .CLK_COR_SEQ_2_ENABLE                   (4'b1111),
+            .CLK_COR_SEQ_2_USE                      ("TRUE"),
+            .CLK_CORRECT_USE                        ("TRUE"),
+
+           //----------------------Channel Bonding----------------------
+            .CHAN_BOND_1_MAX_SKEW                   (1),
+            .CHAN_BOND_2_MAX_SKEW                   (1),
+            .CHAN_BOND_KEEP_ALIGN                   ("FALSE"),
+            .CHAN_BOND_SEQ_1_1                      (10'b0000000000),
+            .CHAN_BOND_SEQ_1_2                      (10'b0000000000),
+            .CHAN_BOND_SEQ_1_3                      (10'b0000000000),
+            .CHAN_BOND_SEQ_1_4                      (10'b0000000000),
+            .CHAN_BOND_SEQ_1_ENABLE                 (4'b1111),
+            .CHAN_BOND_SEQ_2_1                      (10'b0000000000),
+            .CHAN_BOND_SEQ_2_2                      (10'b0000000000),
+            .CHAN_BOND_SEQ_2_3                      (10'b0000000000),
+            .CHAN_BOND_SEQ_2_4                      (10'b0000000000),
+            .CHAN_BOND_SEQ_2_CFG                    (5'b00000),
+            .CHAN_BOND_SEQ_2_ENABLE                 (4'b1111),
+            .CHAN_BOND_SEQ_2_USE                    ("FALSE"),
+            .CHAN_BOND_SEQ_LEN                      (1),
+            .PCI_EXPRESS_MODE                       ("FALSE"),
+
+           //-----------RX Attributes for PCI Express/SATA/SAS----------
+            .SAS_MAX_COMSAS                         (52),
+            .SAS_MIN_COMSAS                         (40),
+            .SATA_BURST_VAL                         (3'b100),
+            .SATA_IDLE_VAL                          (3'b100),
+            .SATA_MAX_BURST                         (9),
+            .SATA_MAX_INIT                          (27),
+            .SATA_MAX_WAKE                          (9),
+            .SATA_MIN_BURST                         (5),
+            .SATA_MIN_INIT                          (15),
+            .SATA_MIN_WAKE                          (5),
+            .TRANS_TIME_FROM_P2                     (12'h03c),
+            .TRANS_TIME_NON_P2                      (8'h19),
+            .TRANS_TIME_RATE                        (8'hff),
+            .TRANS_TIME_TO_P2                       (10'h064)
+
+            
+        ) 
+        gtxe1_i 
+        (
+        
+        //---------------------- Loopback and Powerdown Ports ----------------------
+        .LOOPBACK                       (LOOPBACK_IN),
+        .RXPOWERDOWN                    (RXPOWERDOWN_IN),
+        .TXPOWERDOWN                    (2'b00),
+        //------------ Receive Ports - 64b66b and 64b67b Gearbox Ports -------------
+        .RXDATAVALID                    (),
+        .RXGEARBOXSLIP                  (tied_to_ground_i),
+        .RXHEADER                       (),
+        .RXHEADERVALID                  (),
+        .RXSTARTOFSEQ                   (),
+        //--------------------- Receive Ports - 8b10b Decoder ----------------------
+        .RXCHARISCOMMA                  ({rxchariscomma_float_i,RXCHARISCOMMA_OUT}),
+        .RXCHARISK                      ({rxcharisk_float_i,RXCHARISK_OUT}),
+        .RXDEC8B10BUSE                  (tied_to_vcc_i),
+        .RXDISPERR                      ({rxdisperr_float_i,RXDISPERR_OUT}),
+        .RXNOTINTABLE                   ({rxnotintable_float_i,RXNOTINTABLE_OUT}),
+        .RXRUNDISP                      ({rxrundisp_float_i,RXRUNDISP_OUT}),
+        .USRCODEERR                     (tied_to_ground_i),
+        //----------------- Receive Ports - Channel Bonding Ports ------------------
+        .RXCHANBONDSEQ                  (),
+        .RXCHBONDI                      (tied_to_ground_vec_i[3:0]),
+        .RXCHBONDLEVEL                  (tied_to_ground_vec_i[2:0]),
+        .RXCHBONDMASTER                 (tied_to_ground_i),
+        .RXCHBONDO                      (),
+        .RXCHBONDSLAVE                  (tied_to_ground_i),
+        .RXENCHANSYNC                   (tied_to_ground_i),
+        //----------------- Receive Ports - Clock Correction Ports -----------------
+        .RXCLKCORCNT                    (RXCLKCORCNT_OUT),
+        //------------- Receive Ports - Comma Detection and Alignment --------------
+        .RXBYTEISALIGNED                (),
+        .RXBYTEREALIGN                  (),
+        .RXCOMMADET                     (),
+        .RXCOMMADETUSE                  (tied_to_vcc_i),
+        .RXENMCOMMAALIGN                (RXENMCOMMAALIGN_IN),
+        .RXENPCOMMAALIGN                (RXENPCOMMAALIGN_IN),
+        .RXSLIDE                        (tied_to_ground_i),
+        //--------------------- Receive Ports - PRBS Detection ---------------------
+        .PRBSCNTRESET                   (tied_to_ground_i),
+        .RXENPRBSTST                    (tied_to_ground_vec_i[2:0]),
+        .RXPRBSERR                      (),
+        //----------------- Receive Ports - RX Data Path interface -----------------
+        .RXDATA                         (rxdata_i),
+        .RXRECCLK                       (),
+        .RXRECCLKPCS                    (),
+        .RXRESET                        (RXRESET_IN),
+        .RXUSRCLK                       (tied_to_ground_i),
+        .RXUSRCLK2                      (RXUSRCLK2_IN),
+        //---------- Receive Ports - RX Decision Feedback Equalizer(DFE) -----------
+        .DFECLKDLYADJ                   (tied_to_ground_vec_i[5:0]),
+        .DFECLKDLYADJMON                (),
+        .DFEDLYOVRD                     (tied_to_vcc_i),
+        .DFEEYEDACMON                   (),
+        .DFESENSCAL                     (),
+        .DFETAP1                        (tied_to_ground_vec_i[4:0]),
+        .DFETAP1MONITOR                 (),
+        .DFETAP2                        (tied_to_ground_vec_i[4:0]),
+        .DFETAP2MONITOR                 (),
+        .DFETAP3                        (tied_to_ground_vec_i[3:0]),
+        .DFETAP3MONITOR                 (),
+        .DFETAP4                        (tied_to_ground_vec_i[3:0]),
+        .DFETAP4MONITOR                 (),
+        .DFETAPOVRD                     (tied_to_vcc_i),
+        //----- Receive Ports - RX Driver,OOB signalling,Coupling and Eq.,CDR ------
+        .GATERXELECIDLE                 (tied_to_vcc_i),
+        .IGNORESIGDET                   (tied_to_vcc_i),
+        .RXCDRRESET                     (tied_to_ground_i),
+        .RXELECIDLE                     (RXELECIDLE_OUT),
+        .RXEQMIX                        (10'b0000000111),
+        .RXN                            (RXN_IN),
+        .RXP                            (RXP_IN),
+        //------ Receive Ports - RX Elastic Buffer and Phase Alignment Ports -------
+        .RXBUFRESET                     (RXBUFRESET_IN),
+        .RXBUFSTATUS                    (RXBUFSTATUS_OUT),
+        .RXCHANISALIGNED                (),
+        .RXCHANREALIGN                  (),
+        .RXDLYALIGNDISABLE              (tied_to_ground_i),
+        .RXDLYALIGNMONENB               (tied_to_ground_i),
+        .RXDLYALIGNMONITOR              (),
+        .RXDLYALIGNOVERRIDE             (tied_to_vcc_i),
+        .RXDLYALIGNRESET                (tied_to_ground_i),
+        .RXDLYALIGNSWPPRECURB           (tied_to_vcc_i),
+        .RXDLYALIGNUPDSW                (tied_to_ground_i),
+        .RXENPMAPHASEALIGN              (tied_to_ground_i),
+        .RXPMASETPHASE                  (tied_to_ground_i),
+        .RXSTATUS                       (),
+        //------------- Receive Ports - RX Loss-of-sync State Machine --------------
+        .RXLOSSOFSYNC                   (RXLOSSOFSYNC_OUT),
+        //-------------------- Receive Ports - RX Oversampling ---------------------
+        .RXENSAMPLEALIGN                (tied_to_ground_i),
+        .RXOVERSAMPLEERR                (),
+        //---------------------- Receive Ports - RX PLL Ports ----------------------
+        .GREFCLKRX                      (tied_to_ground_i),
+        .GTXRXRESET                     (GTXRXRESET_IN),
+        .MGTREFCLKRX                    (MGTREFCLKRX_IN),
+        .NORTHREFCLKRX                  (tied_to_ground_vec_i[1:0]),
+        .PERFCLKRX                      (tied_to_ground_i),
+        .PLLRXRESET                     (PLLRXRESET_IN),
+        .RXPLLLKDET                     (RXPLLLKDET_OUT),
+        .RXPLLLKDETEN                   (tied_to_vcc_i),
+        .RXPLLPOWERDOWN                 (tied_to_ground_i),
+        .RXPLLREFSELDY                  (tied_to_ground_vec_i[2:0]),
+        .RXRATE                         (tied_to_ground_vec_i[1:0]),
+        .RXRATEDONE                     (),
+        .RXRESETDONE                    (RXRESETDONE_OUT),
+        .SOUTHREFCLKRX                  (tied_to_ground_vec_i[1:0]),
+        //------------ Receive Ports - RX Pipe Control for PCI Express -------------
+        .PHYSTATUS                      (),
+        .RXVALID                        (),
+        //--------------- Receive Ports - RX Polarity Control Ports ----------------
+        .RXPOLARITY                     (tied_to_ground_i),
+        //------------------- Receive Ports - RX Ports for SATA --------------------
+        .COMINITDET                     (),
+        .COMSASDET                      (),
+        .COMWAKEDET                     (),
+        //----------- Shared Ports - Dynamic Reconfiguration Port (DRP) ------------
+        .DADDR                          (tied_to_ground_vec_i[7:0]),
+        .DCLK                           (tied_to_ground_i),
+        .DEN                            (tied_to_ground_i),
+        .DI                             (tied_to_ground_vec_i[15:0]),
+        .DRDY                           (),
+        .DRPDO                          (),
+        .DWE                            (tied_to_ground_i),
+        //------------ Transmit Ports - 64b66b and 64b67b Gearbox Ports ------------
+        .TXGEARBOXREADY                 (),
+        .TXHEADER                       (tied_to_ground_vec_i[2:0]),
+        .TXSEQUENCE                     (tied_to_ground_vec_i[6:0]),
+        .TXSTARTSEQ                     (tied_to_ground_i),
+        //-------------- Transmit Ports - 8b10b Encoder Control Ports --------------
+        .TXBYPASS8B10B                  (tied_to_ground_vec_i[3:0]),
+        .TXCHARDISPMODE                 ({tied_to_ground_vec_i[1:0],TXCHARDISPMODE_IN}),
+        .TXCHARDISPVAL                  ({tied_to_ground_vec_i[1:0],TXCHARDISPVAL_IN}),
+        .TXCHARISK                      ({tied_to_ground_vec_i[1:0],TXCHARISK_IN}),
+        .TXENC8B10BUSE                  (tied_to_vcc_i),
+        .TXKERR                         (),
+        .TXRUNDISP                      (),
+        //----------------------- Transmit Ports - GTX Ports -----------------------
+        .GTXTEST                        (GTXTEST_IN),
+        .MGTREFCLKFAB                   (),
+        .TSTCLK0                        (tied_to_ground_i),
+        .TSTCLK1                        (tied_to_ground_i),
+        .TSTIN                          (20'b11111111111111111111),
+        .TSTOUT                         (),
+        //---------------- Transmit Ports - TX Data Path interface -----------------
+        .TXDATA                         (txdata_i),
+        .TXOUTCLK                       (TXOUTCLK_OUT),
+        .TXOUTCLKPCS                    (),
+        .TXRESET                        (TXRESET_IN),
+        .TXUSRCLK                       (tied_to_ground_i),
+        .TXUSRCLK2                      (TXUSRCLK2_IN),
+        //-------------- Transmit Ports - TX Driver and OOB signaling --------------
+        .TXBUFDIFFCTRL                  (3'b100),
+        .TXDIFFCTRL                     (4'b0000),
+        .TXINHIBIT                      (tied_to_ground_i),
+        .TXN                            (TXN_OUT),
+        .TXP                            (TXP_OUT),
+        .TXPOSTEMPHASIS                 (5'b00000),
+        //------------- Transmit Ports - TX Driver and OOB signalling --------------
+        .TXPREEMPHASIS                  (4'b0000),
+        //--------- Transmit Ports - TX Elastic Buffer and Phase Alignment ---------
+        .TXBUFSTATUS                    (),
+        //------ Transmit Ports - TX Elastic Buffer and Phase Alignment Ports ------
+        .TXDLYALIGNDISABLE              (tied_to_vcc_i),
+        .TXDLYALIGNMONENB               (tied_to_ground_i),
+        .TXDLYALIGNMONITOR              (),
+        .TXDLYALIGNOVERRIDE             (tied_to_ground_i),
+        .TXDLYALIGNRESET                (tied_to_ground_i),
+        .TXDLYALIGNUPDSW                (tied_to_vcc_i),
+        .TXENPMAPHASEALIGN              (tied_to_ground_i),
+        .TXPMASETPHASE                  (tied_to_ground_i),
+        //--------------------- Transmit Ports - TX PLL Ports ----------------------
+        .GREFCLKTX                      (tied_to_ground_i),
+        .GTXTXRESET                     (GTXTXRESET_IN),
+        .MGTREFCLKTX                    (MGTREFCLKTX_IN),
+        .NORTHREFCLKTX                  (tied_to_ground_vec_i[1:0]),
+        .PERFCLKTX                      (tied_to_ground_i),
+        .PLLTXRESET                     (PLLTXRESET_IN),
+        .SOUTHREFCLKTX                  (tied_to_ground_vec_i[1:0]),
+        .TXPLLLKDET                     (TXPLLLKDET_OUT),
+        .TXPLLLKDETEN                   (tied_to_vcc_i),
+        .TXPLLPOWERDOWN                 (tied_to_ground_i),
+        .TXPLLREFSELDY                  (tied_to_ground_vec_i[2:0]),
+        .TXRATE                         (tied_to_ground_vec_i[1:0]),
+        .TXRATEDONE                     (),
+        .TXRESETDONE                    (TXRESETDONE_OUT),
+        //------------------- Transmit Ports - TX PRBS Generator -------------------
+        .TXENPRBSTST                    (tied_to_ground_vec_i[2:0]),
+        .TXPRBSFORCEERR                 (tied_to_ground_i),
+        //------------------ Transmit Ports - TX Polarity Control ------------------
+        .TXPOLARITY                     (tied_to_ground_i),
+        //--------------- Transmit Ports - TX Ports for PCI Express ----------------
+        .TXDEEMPH                       (tied_to_ground_i),
+        .TXDETECTRX                     (tied_to_ground_i),
+        .TXELECIDLE                     (tied_to_ground_i),
+        .TXMARGIN                       (tied_to_ground_vec_i[2:0]),
+        .TXPDOWNASYNCH                  (tied_to_ground_i),
+        .TXSWING                        (tied_to_ground_i),
+        //------------------- Transmit Ports - TX Ports for SATA -------------------
+        .COMFINISH                      (),
+        .TXCOMINIT                      (tied_to_ground_i),
+        .TXCOMSAS                       (tied_to_ground_i),
+        .TXCOMWAKE                      (tied_to_ground_i)
+
+     );
+     
+endmodule     
+
+ 
 
 
 
@@ -2264,16 +3302,15 @@ module DOUBLE_RESET
 endmodule
 
 
-
 ///////////////////////////////////////////////////////////////////////////////
 //   ____  ____
 //  /   /\/   /
-// /___/  \  /    Vendor: Xilinx 
+// /___/  \  /    Vendor: Xilinx
 // \   \   \/     Version : 1.8
 //  \   \         Application : Virtex-6 FPGA GTX Transceiver Wizard
 //  /   /         Filename : tx_sync.v
-// /___/   /\     Timestamp : 
-// \   \  /  \ 
+// /___/   /\     Timestamp :
+// \   \  /  \
 //  \___\/\___\
 //
 //
@@ -2281,7 +3318,7 @@ endmodule
 // Generated by Xilinx Virtex-6 FPGA GTX Transceiver Wizard
 // (c) Copyright 2009-2010 Xilinx, Inc. All rights reserved.
 `timescale 1ns / 1ps
-`define DLY #1
+//`define DLY #1
 
 module TX_SYNC #
 (
@@ -2323,14 +3360,14 @@ module TX_SYNC #
 
     //________________________________ State machine __________________________
     // This state machine manages the TX phase alignment procedure of the GTX.
-    // The module is held in reset till TXRESETDONE is asserted. Once TXRESETDONE 
+    // The module is held in reset till TXRESETDONE is asserted. Once TXRESETDONE
     // is asserted, the state machine goes into the align_reset_r state, asserting
-    // TXDLYALIGNRESET for 20 TXUSRCLK2 cycles. After this, it goes into the 
-    // wait_before_setphase_r state for 32 cycles. After asserting TXENPMAPHASEALIGN and 
-    // waiting 32 cycles, it goes into the phase_align_r state where the last 
-    // part of the alignment procedure is completed. This involves asserting 
-    // TXPMASETPHASE for 8192 (TXPLL_DIVSEL_OUT=1), 16384 (TXPLL_DIVSEL_OUT=2), 
-    // or 32768 (TXPLL_DIVSEL_OUT=4) clock cycles. After completion of the phase 
+    // TXDLYALIGNRESET for 20 TXUSRCLK2 cycles. After this, it goes into the
+    // wait_before_setphase_r state for 32 cycles. After asserting TXENPMAPHASEALIGN and
+    // waiting 32 cycles, it goes into the phase_align_r state where the last
+    // part of the alignment procedure is completed. This involves asserting
+    // TXPMASETPHASE for 8192 (TXPLL_DIVSEL_OUT=1), 16384 (TXPLL_DIVSEL_OUT=2),
+    // or 32768 (TXPLL_DIVSEL_OUT=4) clock cycles. After completion of the phase
     // alignment procedure, TXDLYALIGNDISABLE is deasserted.
     
     // State registers
@@ -2394,7 +3431,7 @@ module TX_SYNC #
 generate
 if(SIM_TXPMASETPHASE_SPEEDUP==1)
 begin:fast_simulation
-    // 64 cycles of setphase for simulation 
+    // 64 cycles of setphase for simulation
     assign count_setphase_complete_r = sync_counter_r[6];
 end
 else
@@ -2414,122 +3451,8 @@ endgenerate
     //_______________________ Assign the sync_done port _______________________
     
     assign SYNC_DONE = ready_r;
-    
-    
-endmodule
-
-
-
-//
-// PRBS39_TEST
-//    J. Gilmore, 4/20/11
-//-----------------------------------------------------------------------------
-// 39-bit PRBS module, refs:
-//   http://www.eng.auburn.edu/~strouce/polycorrect2.pdf
-//   http://www.xilinx.com/support/documentation/application_notes/xapp052.pdf
-//   http://www.eecs.berkeley.edu/~newton/Classes/CS150sp97/labs/lab5/lab5.html#primPolynomials
-//   http://en.wikipedia.org/wiki/Linear_feedback_shift_register
-//   http://www.springerlink.com/content/u590n42r72568803/
-// Note that for any primitive polynomial, the reverse polynomial is also primitive!
-//-----------------------------------------------------------------------------
-
-module prbs39_test(
-	input [38:0] init_dat,  // ==0 will disable the circuit (set constant)
-	input        en,    // en allows data to go out and checks on the return
-	input        in,    // this is the data bit received, Tpd < 10 ns?  Fmax=50Mhz
-	output       out,   // this is the data bit to send out, on pos-clk
-	output reg   good, err,   // these indicate a match/mismatch was detected
-	output reg [15:0]  count, // this is a 16-bit counter for # of errors
-        input  force_error,  // this needs to trigger a  _single_  bit-flip
-	input        rst,
-	input        clk);  // assume 10-20 MHz operation...NOW 40 Mhz!  later 80?
-
-        wire 	    rawout;
-        reg 	    in_r, out_r, out_rr, out_3r, ferr_r, ferr_rr, ferr_done;
-        reg  [3:0]  en_r;
-
-        prbs39 randombit(init_dat, en, rawout, rst, clk);
-        assign out = rawout^ferr_rr;
-
-	always @(posedge clk or posedge rst) begin
-	   if(rst) begin
-	      en_r <= 0;
-	      count  <= 0;
-	      ferr_r <= 0;
-	      ferr_rr <= 0;	      
-	      in_r <= 0;
-	      out_r <= 0;
-	      out_rr <= 0;
-	      out_3r <= 0;
-	      err <= 0;
-	      good <= 0;
-	   end
-
-	   else begin
-	      in_r <= in;
-	      out_3r <= out_rr;
-	      out_rr <= out_r^ferr_rr;
-	      out_r <= rawout;
-	      if (init_dat != 39'h0000000000) en_r[3:0] <= {en_r[2:0],en};
-	      if ( (&en_r) && (in_r != out_3r)) begin
-		 count <= count + 1'b1;
-		 err <= 1'b1;
-	      end
-	      else err <= 0;
-
-	      if ( (&en_r) && (in_r == out_3r)) good <= 1'b1;
-	      else good <= 0;
-
-
-	      ferr_r <= force_error;
-	      if (!ferr_done) begin
-		 ferr_rr <= ferr_r;
-		 ferr_done <= ferr_r;
-	      end
-	      else begin
-		 ferr_rr <= 0;
-		 ferr_done <= force_error;
-	      end
-
-	   end
-	end // always @ (posedge clk, posedge rst)
 
 endmodule
 
 
 
-
-//
-// PRBS39
-//    J. Gilmore, 4/20/11
-//-----------------------------------------------------------------------------
-// 39-bit PRBS module, refs:
-//   http://www.eng.auburn.edu/~strouce/polycorrect2.pdf
-//   http://www.xilinx.com/support/documentation/application_notes/xapp052.pdf
-//   http://www.eecs.berkeley.edu/~newton/Classes/CS150sp97/labs/lab5/lab5.html#primPolynomials
-//   http://en.wikipedia.org/wiki/Linear_feedback_shift_register
-//   http://www.springerlink.com/content/u590n42r72568803/
-// Note that for any primitive polynomial, the reverse polynomial is also primitive!
-//-----------------------------------------------------------------------------
-
-module prbs39(
-	input [38:0] init_dat,
-	input        en,
-	output reg   out,
-	input        rst,
-	input        clk);
-
-	reg  [39:1] lfsr;
-
-	always @(posedge clk or posedge rst) begin
-	   if(rst) begin
-	      lfsr[39:1]  <= init_dat[38:0];
-	      out <= 0;
-	   end
-	   else begin
-	      out <= lfsr[38];
-	      if (en) lfsr[39:1] <= {lfsr[38:1],lfsr[39]^lfsr[4]};
-//	      else lfsr  <= lfsr;  // why do this???
-	   end
-	end // always
-endmodule
