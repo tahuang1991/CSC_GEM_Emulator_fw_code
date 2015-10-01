@@ -188,7 +188,7 @@ OBUF  #(.DRIVE(12),.IOSTANDARD("DEFAULT"),.SLEW("SLOW")) OBUF_TRG_TDIS (.O(TRG_T
 			trgcnt <= 8'h00;
 		end
 		else begin
-			trgcnt <= trgcnt+1;
+			trgcnt <= trgcnt+1'b1;
 		end
 	end
 	always @* begin

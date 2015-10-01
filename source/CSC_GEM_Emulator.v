@@ -81,14 +81,12 @@ module CSC_GEM_Emulator (
 
     input 	      qpll_lock,
 
+    output        gtl_loop,
+
 // Switches
     input         pb,  // push button
     input  [8:7]  sw,
 
-
-    input  [3:0]  vstat, // +1.5V TMB, Vcore RPC (driven via loopback), +3.3V TMB, +5V TMB
-    input 	      jtag_usr0_tdo, gp_io4,
-    input 	      prom_d3, prom_d7, jtag_fpga3, sda0, tmb_sn, t_crit,
 
 // Ethernet
     input 	      ck_gben, ck_gbep,
@@ -128,7 +126,7 @@ module CSC_GEM_Emulator (
     // snap12 GTX signals
     //------------------------------------------------------------------------------------------------------------------
     wire        synced_snapt;
-    wire        snap_clk2, ck160_locked, ck160_rst;
+    wire        snap_clk2, ck160_locked;
     wire [7:0]  tx_begin, tx_fc;
     reg  [7:0]  ferr_f;
     reg  [15:0] err_count;
@@ -147,17 +145,14 @@ module CSC_GEM_Emulator (
     reg 	      slow_tc;
     reg [7:0]   time_count;
 
-    //wire        gtx_ready;
-    reg 	      qpll_lock_lost;
-    //wire        reset, gtx_reset;
     wire        ext_rst, force_err, stat0;  // stat[3:0] =  cfebemul_in[2,3,1,4] on Emul board!
     wire        ck125, ck160, lhc_ck, lhc_clk, qpll_ck40, slwclk;   // ext 125 usr, QPLL160, ccb_ck40, QPLL40, ccb_ck40/25=1.6MHz
-    wire        lhc_ck0, lhc_ck90, lhc_ck180, lhc_ck270, lhcckfbout, lhcckfbout_buf, lhc_clk90;
+    wire        lhc_ck0, lhc_ck90, lhc_ck180, lhc_ck270, lhcckfbout, lhcckfbout_buf;
     wire        zero = 1'b0;
     wire        one = 1'b1;
     wire [1:0]  zero2 = 0;
     wire [12:0] low = 0;
-    //wire [3:0]  ignore;  // outputs from GTX we don't care about
+
 
     wire        ck40, ck40buf, rdclk;
     reg 	      sel_rdclk;
@@ -179,7 +174,6 @@ module CSC_GEM_Emulator (
     // GbE and BRAM use:
     //---------------------------------------------------------------------
     wire  gbe_refck; // GTXE1 ref clk, used for MGTref and DoubleReset clock
-    wire  gbe_tx_outclk; // out from Tx PLL
     wire  gbe_txclk2, gbe_txclk2_buf;   // drives logic for Tx, the "internal" choice for USR clock
     wire  txoutclk_mmcm_lk;
 
@@ -194,28 +188,22 @@ module CSC_GEM_Emulator (
     reg [15:0]  cmd_code, prev_cmd[3:0];
     reg [11:0]  bk_adr;
     reg         tx_resetdone_r, rx_resetdone_r, rx_resetdone_r2, rx_resetdone_r3, pkt_send;
-    wire        gtx_ready, tx_resetdone, rx_resetdone;
+    wire        tx_resetdone, rx_resetdone;
     reg [7:0]   ovfl_packet;
     reg 	      rx_timeout;
     reg 	      good_rx_cmd;
-    wire        reset, gtx_reset;
     wire        ckgbe;
-    wire [3:0]  ignore;  // outputs from GTX we don't care about
     wire        rxpll_lk;
     wire [2:0]  rx_bufstat;
-    wire [1:0]  rx_comma;
-    wire [1:0]  rx_disp;  // other signals for GTX
-    wire [1:0]  rx_lostsync;
     reg  [1:0]  gbe_kout, tx_kout, tx_kout_r;
     reg 	      comma_align;
     wire [5:0]  rxer;
     reg  [15:0] gbe_txdat, tx_out, tx_out_r;
     wire [15:0] gbe_rxdat;
     reg  [15:0] l_gbe_rxdat, ll_gbe_rxdat;
-    reg 	      l_rxdv, l_kchar, ll_kchar, mac_seek, mac_sync, mac_ack, counter_send;
+    reg 	      l_kchar, ll_kchar, mac_seek, mac_sync, mac_ack, counter_send;
     reg  [1:0]  kchar_r;
     reg  [1:0]  sync_state, data_state;
-    wire        rxdv;
 
     reg  [15:0] data_bram, data_bram_r;  // these are the BRAM MUX bus & register
     wire [63:0] data_oram[BRAM_LIM:12'h000];
@@ -233,8 +221,6 @@ module CSC_GEM_Emulator (
 
     //
     //-----------------------------------------------------------------------------------------------------------------
-
-    assign gtl_loop             = 1'b0;       // JRG: always set LOW (SEU danger, make OPEN --PD)   **Now INPUT for Mezz 2012!**
 
     assign low    = 0;
     assign zero   = 0;
@@ -275,7 +261,6 @@ module CSC_GEM_Emulator (
         hold_bit      = 0;
 
         // JG, some new items:
-        l_rxdv          = 0;
         l_kchar         = 0;
         kchar_r         = 0;
         tx_resetdone_r  = 0;
@@ -377,25 +362,27 @@ module CSC_GEM_Emulator (
     .DEN                 (1'b0),
     .DI                  (16'h0),
     .DO                  (),
-        .DRDY                (),
-        .DWE                 (1'b0),
-        // Ports for dynamic phase shift
-        .PSCLK               (1'b0),
-        .PSEN                (1'b0),
-        .PSINCDEC            (1'b0),
-        .PSDONE              (),
-        // Other control and status signals
-        .LOCKED              (lhc_locked),
-        .CLKINSTOPPED        (),
-        .CLKFBSTOPPED        (),
-        .PWRDWN              (1'b0),
+    .DRDY                (),
+    .DWE                 (1'b0),
+    // Ports for dynamic phase shift
+    .PSCLK               (1'b0),
+    .PSEN                (1'b0),
+    .PSINCDEC            (1'b0),
+    .PSDONE              (),
+    // Other control and status signals
+    .LOCKED              (lhc_locked),
+    .CLKINSTOPPED        (),
+    .CLKFBSTOPPED        (),
+    .PWRDWN              (1'b0),
     .RST                 (1'b0));
+
+
     // Output buffering
     //-----------------------------------
     BUFG lhcclkf_buf     ( .O (lhcckfbout_buf), .I (lhcckfbout));
     BUFG lhcclkout0_buf  ( .O (lhc_clk),        .I (lhc_ck0));
-    BUFG lhcclkout90_buf ( .O (lhc_clk90),      .I (lhc_ck90));
 
+    wire clk_sump = lhc_ck180 | lhc_ck270 | ck94 | ck87 | ck15 | stopped;
 
 //----------------------------------------------------------------------------------------------------------------------
 // Snap-12 Tx
@@ -403,22 +390,21 @@ module CSC_GEM_Emulator (
 
     // resets
     //------------------------------------------------------------------------------
-    assign gtx_ready = tx_resetdone_r & rx_resetdone_r & txoutclk_mmcm_lk & lock40 & ck160_locked;
-    assign reset     = (!sw[7] & !pb);
-    assign gtx_reset = reset | !gtx_ready;
-    assign rxdv      = ~(|rxer | rx_bufstat[2]) & gbe_fok; // idle is K28.5,D16.2 = BC,50 in time order
+    wire gtx_ready = tx_resetdone_r & rx_resetdone_r & txoutclk_mmcm_lk & lock40 & ck160_locked;
+    wire reset     = (!sw[7] & !pb);
+    wire gtx_reset = reset | !gtx_ready;
+    wire rxdv      = ~(|rxer | rx_bufstat[2]) & gbe_fok; // idle is K28.5,D16.2 = BC,50 in time order
 
     wire [8:0] rd_addr;
     reg [15:0] rd_ptr=0;
     reg [7:0]  cmd_code_r=0, cmd_code_rr=0, nbx_r=0, ibx=0;
-    reg 	 dump_enable=0,  dump_loop_i=0, event_enable=0, send_event_r=0;
+    reg 	 dump_enable=0,  dump_loop_i=0, event_enable=0;
     reg 	 dump_enable_r=0, dump_enable_rr=0, dump_loop_r=0, event_enable_r=0, dump_done=0, event_done=0;
     assign send_event = dump_enable_rr || (event_enable_r & !event_done);  // use this OR (f3f3 && (bk_adr == v)) to Read Enable the BRAMs
 
     always @(posedge rdclk) begin
         //   always @(posedge ck40) begin  // try rdclk here instead, should be OK.
         fiber_reset    <= gtx_reset;
-        send_event_r   <= send_event;
         dump_enable_r  <= dump_enable;
         dump_loop_r    <= dump_loop & dump_enable_r; // dump_loop is set in gbe cmd section
         event_enable_r <= event_enable;
@@ -439,7 +425,6 @@ module CSC_GEM_Emulator (
         if ( gtx_reset || ((cmd_code_r == 8'hf0)&&(cmd_code_rr == 8'hf0)) || ((cmd_code_r == 8'hf7)&&(cmd_code_rr == 8'hf7)) ) begin
             rd_ptr       <= 0;
             ibx          <= 0;
-            send_event_r <= 0;
         end
         else if (dump_enable_rr | event_enable_r) begin
             if (!event_done)
@@ -458,7 +443,7 @@ module CSC_GEM_Emulator (
 
     reg [47:0] fiber_out[7:0];
     always @(negedge ck40) begin  // 80 MHz derived from GTX_TxPLL
-        fiber_out[0][47:0] <= (send_event) ? gem_data_mux       : 48'h000000000000;
+        fiber_out[0][47:0] <= (send_event) ? data_oram[0][47:0] : 48'h000000000000;
         fiber_out[1][47:0] <= (send_event) ? data_oram[1][47:0] : 48'h000000000000;
         fiber_out[2][47:0] <= (send_event) ? data_oram[2][47:0] : 48'h000000000000;
         fiber_out[3][47:0] <= (send_event) ? data_oram[3][47:0] : 48'h000000000000;
@@ -620,15 +605,16 @@ module CSC_GEM_Emulator (
 
     mac_crc  mac_crc32(gbe_txdat, crc_en, crc_out, crc_rst, gbe_txclk2);
 
-
-    always @(posedge gbe_txclk2) // everything that uses GbE USR clock, no Reset
+    // everything that uses GbE USR clock, no Reset
+    always @(posedge gbe_txclk2)
     begin
         tx_out_r  <= tx_out;
         tx_kout_r <= tx_kout;
         time_r_i  <= time_count;
     end
 
-    always @(posedge gbe_txclk2 or posedge reset) // everything using GbE USR clock w/simple Reset
+    // everything using GbE USR clock w/simple Reset
+    always @(posedge gbe_txclk2 or posedge reset)
     begin
         if (reset) begin
             time_r <= 8'h00;
@@ -651,7 +637,6 @@ module CSC_GEM_Emulator (
         if (gtx_reset) begin
             comma_align     <= 0;
             counter_send    <= 0;
-            l_rxdv          <= 0;
             l_kchar         <= 0;
             ll_kchar        <= 0;
             l_gbe_rxdat     <= 0;
@@ -858,7 +843,6 @@ module CSC_GEM_Emulator (
                 else if (data_state > 2'h0) data_state <= data_state + 2'h1;
             end
 
-            l_rxdv       <= rxdv;  // note, rxdv may stay True for over .5 sec after Reset!  Why...?
             ll_kchar     <= l_kchar;
             l_kchar      <= rxer[0]|rxer[1];
             kchar_r      <= rxer[1:0];
@@ -964,6 +948,12 @@ module CSC_GEM_Emulator (
         endcase
     end  // always @ (*)
 
+    wire [1:0]  rx_comma;
+    wire [1:0]  rx_disp;  // other signals for GTX
+    wire [3:0]  ignore;  // outputs from GTX we don't care about
+    wire [1:0]  rx_lostsync;
+    wire  gbe_tx_outclk; // out from Tx PLL
+
     GBE_T20R20 gbe_gtx (
         gbe_refck,         // GTX0_DOUBLE_RESET_CLK_IN,
 
@@ -1032,84 +1022,91 @@ module CSC_GEM_Emulator (
         tx_resetdone       // GTX0_TXRESETDONE_OUT
     );
 
+    wire gbe_sump =  (|rx_comma)
+                    |(|rx_disp)
+                    |(|ignore)
+                    |(|rx_lostsync)
+                    |( gbe_tx_outclk);
+
+
 //----------------------------------------------------------------------------------------------------------------------
 // GEM Data Emulation
 //----------------------------------------------------------------------------------------------------------------------
 
-    reg [191:0] partition0 = 0;
-    reg [191:0] partition1 = 0;
-    reg [191:0] partition2 = 0;
-    reg [191:0] partition3 = 0;
-    reg [191:0] partition4 = 0;
-    reg [191:0] partition5 = 0;
-    reg [191:0] partition6 = 0;
-    reg [191:0] partition7 = 0;
+  //   reg [191:0] partition0 = 0;
+  //   reg [191:0] partition1 = 0;
+  //   reg [191:0] partition2 = 0;
+  //   reg [191:0] partition3 = 0;
+  //   reg [191:0] partition4 = 0;
+  //   reg [191:0] partition5 = 0;
+  //   reg [191:0] partition6 = 0;
+  //   reg [191:0] partition7 = 0;
 
-    //genvar ibit;
-    //
-    //reg [3:0] rowcnter;
-    //reg [7:0] keycnter;
+  //   //genvar ibit;
+  //   //
+  //   //reg [3:0] rowcnter;
+  //   //reg [7:0] keycnter;
 
-    reg [3:0] gem_hit_emu=4'b0;
-    parameter gem_hit_s0 = 4'b0;
-    parameter gem_hit_s1 = 4'b1;
-    parameter gem_hit_s2 = 4'b1;
-    parameter gem_hit_s3 = 4'b1;
+  //   reg [3:0] gem_hit_emu=4'b0;
+  //   parameter gem_hit_s0 = 4'b0;
+  //   parameter gem_hit_s1 = 4'b1;
+  //   parameter gem_hit_s2 = 4'b1;
+  //   parameter gem_hit_s3 = 4'b1;
 
-    always @(posedge lhc_ck) begin
-    case (gem_hit_emu)
-        gem_hit_s0:  begin
-            partition0 <= 192'h000111222333444555666777888999AAABBBCCCDDDEEEFFF;
-            partition1 <= 192'h111222333444555666777888999AAABBBCCCDDDEEEFFF000;
-            partition2 <= 192'h222333444555666777888999AAABBBCCCDDDEEEFFF000111;
-            partition3 <= 192'h333444555666777888999AAABBBCCCDDDEEEFFF000111222;
-            partition4 <= 192'h444555666777888999AAABBBCCCDDDEEEFFF000111222333;
-            partition5 <= 192'h555666777888999AAABBBCCCDDDEEEFFF000111222333444;
-            partition6 <= 192'h666777888999AAABBBCCCDDDEEEFFF000111222333444555;
-            partition7 <= 192'h777888999AAABBBCCCDDDEEEFFF000111222333444555666;
-            gem_hit_emu <= gem_hit_s1;
-        end
-        gem_hit_s1: begin
-            partition0 <= 192'hFFFEEEDDDCCCBBBAAA999888777666555444333222111000;
-            partition1 <= 192'hEEEDDDCCCBBBAAA999888777666555444333222111000FFF;
-            partition2 <= 192'hDDDCCCBBBAAA999888777666555444333222111000FFFEEE;
-            partition3 <= 192'hCCCBBBAAA999888777666555444333222111000FFFEEEDDD;
-            partition4 <= 192'hBBBAAA999888777666555444333222111000FFFEEEDDDCCC;
-            partition5 <= 192'hAAA999888777666555444333222111000FFFEEEDDDCCCBBB;
-            partition6 <= 192'h999888777666555444333222111000FFFEEEDDDCCCBBBAAA;
-            partition7 <= 192'h888777666555444333222111000FFFEEEDDDCCCBBBAAA999;
-            gem_hit_emu <= gem_hit_s2;
-        end
-        gem_hit_s2: begin
-            partition0 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
-            partition1 <= 192'h555555555555555555555555555555555555555555555555;
-            partition2 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
-            partition3 <= 192'h555555555555555555555555555555555555555555555555;
-            partition4 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
-            partition5 <= 192'h555555555555555555555555555555555555555555555555;
-            partition6 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
-            partition7 <= 192'h555555555555555555555555555555555555555555555555;
-            gem_hit_emu <= gem_hit_s3;
-        end
-        gem_hit_s3: begin
-            partition0 <= 192'h555555555555555555555555555555555555555555555555;
-            partition1 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
-            partition2 <= 192'h555555555555555555555555555555555555555555555555;
-            partition3 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
-            partition4 <= 192'h555555555555555555555555555555555555555555555555;
-            partition5 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
-            partition6 <= 192'h555555555555555555555555555555555555555555555555;
-            partition7 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
-            gem_hit_emu <= gem_hit_s0;
-        end
-    endcase
-    end
+  //   always @(posedge lhc_ck) begin
+  //   case (gem_hit_emu)
+  //       gem_hit_s0:  begin
+  //           partition0 <= 192'h000111222333444555666777888999AAABBBCCCDDDEEEFFF;
+  //           partition1 <= 192'h111222333444555666777888999AAABBBCCCDDDEEEFFF000;
+  //           partition2 <= 192'h222333444555666777888999AAABBBCCCDDDEEEFFF000111;
+  //           partition3 <= 192'h333444555666777888999AAABBBCCCDDDEEEFFF000111222;
+  //           partition4 <= 192'h444555666777888999AAABBBCCCDDDEEEFFF000111222333;
+  //           partition5 <= 192'h555666777888999AAABBBCCCDDDEEEFFF000111222333444;
+  //           partition6 <= 192'h666777888999AAABBBCCCDDDEEEFFF000111222333444555;
+  //           partition7 <= 192'h777888999AAABBBCCCDDDEEEFFF000111222333444555666;
+  //           gem_hit_emu <= gem_hit_s1;
+  //       end
+  //       gem_hit_s1: begin
+  //           partition0 <= 192'hFFFEEEDDDCCCBBBAAA999888777666555444333222111000;
+  //           partition1 <= 192'hEEEDDDCCCBBBAAA999888777666555444333222111000FFF;
+  //           partition2 <= 192'hDDDCCCBBBAAA999888777666555444333222111000FFFEEE;
+  //           partition3 <= 192'hCCCBBBAAA999888777666555444333222111000FFFEEEDDD;
+  //           partition4 <= 192'hBBBAAA999888777666555444333222111000FFFEEEDDDCCC;
+  //           partition5 <= 192'hAAA999888777666555444333222111000FFFEEEDDDCCCBBB;
+  //           partition6 <= 192'h999888777666555444333222111000FFFEEEDDDCCCBBBAAA;
+  //           partition7 <= 192'h888777666555444333222111000FFFEEEDDDCCCBBBAAA999;
+  //           gem_hit_emu <= gem_hit_s2;
+  //       end
+  //       gem_hit_s2: begin
+  //           partition0 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
+  //           partition1 <= 192'h555555555555555555555555555555555555555555555555;
+  //           partition2 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
+  //           partition3 <= 192'h555555555555555555555555555555555555555555555555;
+  //           partition4 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
+  //           partition5 <= 192'h555555555555555555555555555555555555555555555555;
+  //           partition6 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
+  //           partition7 <= 192'h555555555555555555555555555555555555555555555555;
+  //           gem_hit_emu <= gem_hit_s3;
+  //       end
+  //       gem_hit_s3: begin
+  //           partition0 <= 192'h555555555555555555555555555555555555555555555555;
+  //           partition1 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
+  //           partition2 <= 192'h555555555555555555555555555555555555555555555555;
+  //           partition3 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
+  //           partition4 <= 192'h555555555555555555555555555555555555555555555555;
+  //           partition5 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
+  //           partition6 <= 192'h555555555555555555555555555555555555555555555555;
+  //           partition7 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
+  //           gem_hit_emu <= gem_hit_s0;
+  //       end
+  //   endcase
+  //   end
 
-    wire [13:0] hit0;
-    wire [13:0] hit1;
-    wire [13:0] hit2;
-    wire bsy1;
-    wire bsy2;
+  //   wire [13:0] hit0;
+  //   wire [13:0] hit1;
+  //   wire [13:0] hit2;
+  //   wire bsy1;
+  //   wire bsy2;
 
 
     //  csc_hit_packer u_csc_hit_packer (
@@ -1139,44 +1136,45 @@ module CSC_GEM_Emulator (
     //      .data_out        (gem_datagen)
     //  );
 
-    wire sump;
-    assign sump = (|hit0[13:0]) | (|hit1[13:0]) | (|hit2[13:0]) | (|bsy1) | (|bsy2);
+    //wire gem_sump = (|hit0[13:0]) | (|hit1[13:0]) | (|hit2[13:0]) | (|bsy1) | (|bsy2);
+    wire gem_sump;
 
 //----------------------------------------------------------------------------------------------------------------------
-// LED Assignments
+// qpll lock lost
 //----------------------------------------------------------------------------------------------------------------------
-
-    always @(*)
-    begin // JG, v1p16: swap LED 3<>4, notes and all
-        led_low[0] =  sump;
-        led_low[1] =  1'b0;
-        led_low[2] =  qpll_lock;              // always ON!   was !_ccb_rx[31] == _alct_adb_pulse_async
-        led_low[3] =  qpll_lock_lost;         // always OFF?  was _ccb_rx[35] == mpc_in1, always ON
-        led_low[4] =  lhc_clk;
-        led_low[5] =  ck160_locked;           // always ON!                                              // Tx GTX PLL Ref lock
-        led_low[6] =  1'b0;                    // --> ON!  comes from mmcm driven by tx_pll_ck160 in FPGA
-        led_low[7] =  lhc_clk;                // just reset, includes ccb_rx[1]==L1reset
-
-        led_hi[8]  = !(hold_bit | gtx_reset); // M1: synced with PB & errors at crate Rx
-        led_hi[9]  =  qpll_lock_lost;         // 0
-        led_hi[10] = !cmd_code[7];            // !gtx_reset; // 0
-        led_hi[11] = !rd_ptr[8];              // ~6.25 usec  // gtx_ready;             // 1
-        led_hi[12] = !dump_enable_rr;         // 12.5 usec   //
-        led_hi[13] = !dump_enable_r;          // 12.5 usec   // (locked & lhc_locked); // 1
-        led_hi[14] = !dump_enable;            // 12.5 usec
-        led_hi[15] = !dump_done;              // 50ns
-
-        test_led[9]   = lhc_ck;
-        test_led[10]  = 1'b0;
-
+    reg qpll_lock_lost;
+    always @(posedge lhc_clk or posedge reset) // everything that uses lhc_clk w/simple Reset
+    begin
+        if (reset) begin
+            qpll_lock_lost <= 0;
+        end
+        else begin
+            qpll_lock_lost <= !qpll_lock | qpll_lock_lost;
+        end
     end
+
+//----------------------------------------------------------------------------------------------------------------------
+// slow clock
+//----------------------------------------------------------------------------------------------------------------------
+
+    always @(posedge slwclk or posedge reset) // everything that uses 1.6 MHz clock with simple Reset (from lhc_clk)
+    begin
+        // reset
+        if (reset) begin
+            time_count <= 0;
+        end
+        else begin
+
+
+        if (gtx_ready && time_count < 8'hfe) time_count <= time_count + 1'b1; // use to delay startup; ends.
+        end  // close !reset
+    end // close always
 
 //----------------------------------------------------------------------------------------------------------------------
 // snap12 mmcm clock manager
 //----------------------------------------------------------------------------------------------------------------------
 
     SRL16E #(.INIT(16'h7FFF)) SRL16TXPLL(.Q(txpll_rst), .A0(1'b1), .A1(1'b1), .A2(1'b1), .A3(1'b1), .CE (1'b1), .CLK(qpll_ck40), .D(1'b0));
-    SRL16E #(.INIT(16'h0FFF)) SRL16MMCM(.Q(ck160_rst), .A0(1'b1), .A1(1'b1), .A2(1'b1), .A3(1'b1), .CE (ck160_locked), .CLK(qpll_ck40), .D(1'b0));
     //     mmcm from 80 MHz:               In,    out80,  out160,   out40,   reset,       locked
     //   bufg_x2div2 snap_mmcm (tx_clk_out, tx_clk, snap_clk2, ck40, !ck160_locked, lock40); // from Tx GTX PLL out clk
     //     mmcm from 80 MHz:                 In,    out80,  out160,   out40,   reset,       locked,   out40-no-bufg
@@ -1205,7 +1203,7 @@ module CSC_GEM_Emulator (
         .TRG_TX_REFCLK       (ck160),                 // QPLL 160 from MGT clk
         .TRG_TXUSRCLK        (snap_clk2),             // get 160 from TXOUTCLK (times 2)
         .TRG_CLK80           (tx_clk),                // get 80 from TXOUTCLK
-        .TRG_GTXTXRST        (txpll_rst),             // maybe Manual "reset" only
+        .TRG_GTXTXRST        (1'b0     ),             // maybe Manual "reset" only
         .TRG_TX_PLLRST       (txpll_rst),             // Tie LOW.
         .TRG_RST             (fiber_reset),           // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
         .ENA_TEST_PAT        (sw[8]),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
@@ -1273,8 +1271,8 @@ module CSC_GEM_Emulator (
         .TRG_TX_REFCLK       ( ck160),               // QPLL 160 from MGT clk
         .TRG_TXUSRCLK        ( snap_clk2),           // get 160 from TXOUTCLK (times 2)
         .TRG_CLK80           ( tx_clk),              // get 80 from TXOUTCLK
-        .TRG_GTXTXRST        ( 0),                   // maybe Manual "reset" only
-        .TRG_TX_PLLRST       ( 0),                   // Tie LOW.
+        .TRG_GTXTXRST        ( 1'b0),                // maybe Manual "reset" only
+        .TRG_TX_PLLRST       ( 1'b0),                // Tie LOW.
         .TRG_RST             ( fiber_reset),         // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
         .ENA_TEST_PAT        ( sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
         .INJ_ERR             ( ferr_f[2] & sw[8]),   // use my switch/PB combo logic for this, high-true? Pulse high once.
@@ -1307,8 +1305,8 @@ module CSC_GEM_Emulator (
         .TRG_TX_REFCLK       ( ck160),               // QPLL 160 from MGT clk
         .TRG_TXUSRCLK        ( snap_clk2),           // get 160 from TXOUTCLK (times 2)
         .TRG_CLK80           ( tx_clk),              // get 80 from TXOUTCLK
-        .TRG_GTXTXRST        ( 0),                   // maybe Manual "reset" only
-        .TRG_TX_PLLRST       ( 0),                   // Tie LOW.
+        .TRG_GTXTXRST        ( 1'b0),                // maybe Manual "reset" only
+        .TRG_TX_PLLRST       ( 1'b0),                // Tie LOW.
         .TRG_RST             ( fiber_reset),         // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
         .ENA_TEST_PAT        ( sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
         .INJ_ERR             ( ferr_f[3] & sw[8]),   // use my switch/PB combo logic for this, high-true? Pulse high once.
@@ -1341,8 +1339,8 @@ module CSC_GEM_Emulator (
         .TRG_TX_REFCLK       ( ck160),               // QPLL 160 from MGT clk
         .TRG_TXUSRCLK        ( snap_clk2),           // get 160 from TXOUTCLK (times 2)
         .TRG_CLK80           ( tx_clk),              // get 80 from TXOUTCLK
-        .TRG_GTXTXRST        ( 0),                   // maybe Manual "reset" only
-        .TRG_TX_PLLRST       ( 0),                   // Tie LOW.
+        .TRG_GTXTXRST        ( 1'b0),                // maybe Manual "reset" only
+        .TRG_TX_PLLRST       ( 1'b0),                // Tie LOW.
         .TRG_RST             ( fiber_reset),         // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
         .ENA_TEST_PAT        ( sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
         .INJ_ERR             ( ferr_f[4] & sw[8]),   // use my switch/PB combo logic for this, high-true? Pulse high once.
@@ -1375,8 +1373,8 @@ module CSC_GEM_Emulator (
         .TRG_TX_REFCLK        (ck160),               // QPLL 160 from MGT clk
         .TRG_TXUSRCLK         (snap_clk2),           // get 160 from TXOUTCLK (times 2)
         .TRG_CLK80            (tx_clk),              // get 80 from TXOUTCLK
-        .TRG_GTXTXRST         (0),                   // maybe Manual "reset" only
-        .TRG_TX_PLLRST        (0),                   // Tie LOW.
+        .TRG_GTXTXRST         (1'b0),                // maybe Manual "reset" only
+        .TRG_TX_PLLRST        (1'b0),                // Tie LOW.
         .TRG_RST              (fiber_reset),         // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
         .ENA_TEST_PAT         (sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers) Use This Later, send low-rate pattern.
         .INJ_ERR              (ferr_f[5] & sw[8]),   // use my switch/PB combo logic for this, high-true? Pulse high once.
@@ -1409,8 +1407,8 @@ module CSC_GEM_Emulator (
         .TRG_TX_REFCLK        ( ck160),               // QPLL 160 from MGT clk
         .TRG_TXUSRCLK         ( snap_clk2),           // get 160 from TXOUTCLK (times 2)
         .TRG_CLK80            ( tx_clk),              // get 80 from TXOUTCLK
-        .TRG_GTXTXRST         ( 0),                   // maybe Manual "reset" only
-        .TRG_TX_PLLRST        ( 0),                   // Tie LOW.
+        .TRG_GTXTXRST         ( 1'b0),                // maybe Manual "reset" only
+        .TRG_TX_PLLRST        ( 1'b0),                // Tie LOW.
         .TRG_RST              ( fiber_reset),         // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
         .ENA_TEST_PAT         ( sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers) Use This Later, send low-rate pattern.
         .INJ_ERR              ( ferr_f[6] & sw[8]),   // use my switch/PB combo logic for this, high-true? Pulse high once.
@@ -1443,8 +1441,8 @@ module CSC_GEM_Emulator (
         .TRG_TX_REFCLK       ( ck160),               // QPLL 160 from MGT clk
         .TRG_TXUSRCLK        ( snap_clk2),           // get 160 from TXOUTCLK                                                                                                                                                                           ( times 2)
         .TRG_CLK80           ( tx_clk),              // get 80 from TXOUTCLK
-        .TRG_GTXTXRST        ( 0),                   // maybe Manual "reset" only
-        .TRG_TX_PLLRST       ( 0),                   // Tie LOW.
+        .TRG_GTXTXRST        ( 1'b0),                // maybe Manual "reset" only
+        .TRG_TX_PLLRST       ( 1'b0),                // Tie LOW.
         .TRG_RST             ( fiber_reset),         // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
         .ENA_TEST_PAT        ( sw[8]),               // HIGH for PRBS!                                                                                                                                                                                  ( Low will send data from GxC registers)  Use This Later, send low-rate pattern.
         .INJ_ERR             ( ferr_f[7] & sw[8]),   // use my switch/PB combo logic for this, high-true? Pulse high once.
@@ -1459,6 +1457,39 @@ module CSC_GEM_Emulator (
         .MON_TRG_TX_ISK      ( ),                    // N/A returns 4 bits
         .MON_TRG_TX_DATA     ( )                     // N/A returns 32 bits
     );
+
+    wire fiberout_sump = (|tx_begin[7:0]) | (|tx_fc[7:0]) |synced_snapt | t12_fault | r12_fok;
+
+//----------------------------------------------------------------------------------------------------------------------
+// LED Assignments
+//----------------------------------------------------------------------------------------------------------------------
+
+    wire sump = gbe_sump | gem_sump | fiberout_sump | clk_sump;
+
+    always @(*)
+    begin // JG, v1p16: swap LED 3<>4, notes and all
+        led_low[0] =  sump;
+        led_low[1] =  1'b0;
+        led_low[2] =  qpll_lock;              // always ON!   was !_ccb_rx[31] == _alct_adb_pulse_async
+        led_low[3] =  qpll_lock_lost;         // always OFF?  was _ccb_rx[35] == mpc_in1, always ON
+        led_low[4] =  lhc_clk;
+        led_low[5] =  ck160_locked;           // always ON!                                              // Tx GTX PLL Ref lock
+        led_low[6] =  1'b0;                    // --> ON!  comes from mmcm driven by tx_pll_ck160 in FPGA
+        led_low[7] =  lhc_clk;                // just reset, includes ccb_rx[1]==L1reset
+
+        led_hi[8]  = !(hold_bit | gtx_reset); // M1: synced with PB & errors at crate Rx
+        led_hi[9]  =  qpll_lock_lost;         // 0
+        led_hi[10] = !cmd_code[7];            // !gtx_reset; // 0
+        led_hi[11] = !rd_ptr[8];              // ~6.25 usec  // gtx_ready;             // 1
+        led_hi[12] = !dump_enable_rr;         // 12.5 usec   //
+        led_hi[13] = !dump_enable_r;          // 12.5 usec   // (locked & lhc_locked); // 1
+        led_hi[14] = !dump_enable;            // 12.5 usec
+        led_hi[15] = !dump_done;              // 50ns
+
+        test_led[9]   = lhc_ck;
+        test_led[10]  = 1'b0;
+
+    end
 
 //----------------------------------------------------------------------------------------------------------------------
 endmodule

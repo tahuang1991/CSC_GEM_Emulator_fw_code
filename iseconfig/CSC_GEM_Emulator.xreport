@@ -1,9 +1,9 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <report-views version="2.0" >
  <header>
-  <DateModified>2015-10-01T11:10:48</DateModified>
+  <DateModified>2015-10-01T11:29:22</DateModified>
   <ModuleName>CSC_GEM_Emulator</ModuleName>
-  <SummaryTimeStamp>2015-10-01T11:09:52</SummaryTimeStamp>
+  <SummaryTimeStamp>2015-10-01T11:19:54</SummaryTimeStamp>
   <ImplementationReportsDirectory>C:/Users/Andrew/Dropbox/CMS/GEM/emulator_fw/work\</ImplementationReportsDirectory>
   <DateInitialized>2015-09-24T16:32:35</DateInitialized>
   <SavedFilePath>C:/Users/Andrew/Dropbox/CMS/GEM/emulator_fw/iseconfig/CSC_GEM_Emulator.xreport</SavedFilePath>
@@ -42,8 +42,8 @@
   </viewgroup>
   <viewgroup label="Errors and Warnings" >
    <view program="pn" WrapMessages="true" contextTags="EDK_OFF" type="MessageList" hideColumns="Filtered, New" file="_xmsgs/pn_parser.xmsgs" label="Parser Messages" />
-   <view program="xst" WrapMessages="true" contextTags="XST_ONLY,EDK_OFF" showInfos="0" hidden="false" type="MessageList" hideColumns="Filtered" file="_xmsgs/xst.xmsgs" label="Synthesis Messages" showWarnings="0" />
-   <view inputState="Synthesized" program="ngdbuild" WrapMessages="true" showInfos="0" type="MessageList" hideColumns="Filtered" file="_xmsgs/ngdbuild.xmsgs" label="Translation Messages" showWarnings="0" />
+   <view program="xst" WrapMessages="true" contextTags="XST_ONLY,EDK_OFF" showInfos="0" hidden="false" type="MessageList" hideColumns="Filtered" file="_xmsgs/xst.xmsgs" label="Synthesis Messages" showWarnings="1" />
+   <view inputState="Synthesized" program="ngdbuild" WrapMessages="true" showInfos="0" type="MessageList" hideColumns="Filtered" file="_xmsgs/ngdbuild.xmsgs" label="Translation Messages" showWarnings="1" />
    <view inputState="Translated" program="map" WrapMessages="true" contextTags="FPGA_ONLY" type="MessageList" hideColumns="Filtered" file="_xmsgs/map.xmsgs" label="Map Messages" />
    <view inputState="Mapped" program="par" WrapMessages="true" contextTags="FPGA_ONLY" type="MessageList" hideColumns="Filtered" file="_xmsgs/par.xmsgs" label="Place and Route Messages" />
    <view inputState="Routed" program="trce" WrapMessages="true" contextTags="FPGA_ONLY" type="MessageList" hideColumns="Filtered" file="_xmsgs/trce.xmsgs" label="Timing Messages" />
