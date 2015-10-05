@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+
 //////////////////////////////////////////////////////////////////////////////////
 // *** JRG, firmware for Fiber Tx Bench Board, used for GEM-CSC pattern tests **
 //  Only for use on 2010 prototype boards; compile it for the XC6VLX195T FPGA
@@ -95,17 +96,12 @@ module CSC_GEM_Emulator (
     output 	      gbe_txn, gbe_txp,
     output 	      f_sclk,
 
-
-    output [3:0]      sel_usr,
-    output [3:1]      jtag_usr, // [0] is Input, see above
-
-    output 	          rst_qpll, fcs,
-    output [4:0]      step, // step4 enables STEP mode for 3:0 = cfeb, rpc, dmb, alct.  step4 Low makes all free-running clocks.
+    output 	      rst_qpll, fcs,
 
 // LEDs
-    output reg [7:0]  led_low,
-    output reg [15:8] led_hi,
-    output reg [10:9] test_led,
+    output reg [7:0]    led_low,
+    output reg [15:8]   led_hi,
+    output reg [10:9]   test_led,
 
 
 // Snap-12 Tranceivers
@@ -118,6 +114,19 @@ module CSC_GEM_Emulator (
     output            r12_sclk
 ) /* synthesis syn_useioff = 1 */;
 
+// writes to block ram
+parameter CMD_WRITE   = 16'hf7f7; // 16'b1111011111110111
+// reads from block ram
+parameter CMD_READ    = 16'hf3f3; // 16'b1111001111110011
+// dump block ram contents
+parameter CMD_DUMP = 16'hfdfd; // 16'b1111110111111101
+
+
+// not used in sw
+parameter CMD_SEND = 16'hfefe; // 16'b1111111011111110
+parameter CMD_EOF     = 16'hf7fd; // 16'b1111011111111101
+parameter CMD_REWIND  = 16'hf0f0; // 16'
+
 
 //----------------------------------------------------------------------------------------------------------------------
 // Interconnects
@@ -125,6 +134,7 @@ module CSC_GEM_Emulator (
 
     // snap12 GTX signals
     //------------------------------------------------------------------------------------------------------------------
+    assign gtl_loop = 1'b0; // JRG: always set LOW (SEU danger, make OPEN --PD)   **Now INPUT for Mezz 2012!**
     wire        synced_snapt;
     wire        snap_clk2, ck160_locked;
     wire [7:0]  tx_begin, tx_fc;
@@ -132,7 +142,7 @@ module CSC_GEM_Emulator (
     reg  [15:0] err_count;
     reg  [7:0]  time_r_snap;
     reg  [7:0]  time_snap;
-    wire stopped, locked, lock40, dmbfifo_step1ck;
+    wire stopped, locked, lock40;
 
     // snap12 GTX signals
     //------------------------------------------------------------------------------------------------------------------
@@ -144,6 +154,9 @@ module CSC_GEM_Emulator (
     reg 	      free_tc;
     reg 	      slow_tc;
     reg [7:0]   time_count;
+    reg [7:0]   time_r,time_r_i;
+
+    wire        startup_done = time_r[7];
 
     wire        ext_rst, force_err, stat0;  // stat[3:0] =  cfebemul_in[2,3,1,4] on Emul board!
     wire        ck125, ck160, lhc_ck, lhc_clk, qpll_ck40, slwclk;   // ext 125 usr, QPLL160, ccb_ck40, QPLL40, ccb_ck40/25=1.6MHz
@@ -168,8 +181,6 @@ module CSC_GEM_Emulator (
     //---------------------------------------------------------------------
     reg 	       hold_bit;        // debounced !pb signal, held until button release
     reg 	       debounced_bit;   // sets one pulse for 200 ns  (5 MHz clock)
-    reg 	       pb_pulse;        //  <- sw7 & !pb, clears on pb high after 2nd seq. shift (debounce), lasts a while!
-    reg 	       err_wait;        // pb_pulse & tc & !wait -> load rnd_word, set wait.  !pb_pulse & tc & wait -> clear wait
 
     // GbE and BRAM use:
     //---------------------------------------------------------------------
@@ -177,7 +188,7 @@ module CSC_GEM_Emulator (
     wire  gbe_txclk2, gbe_txclk2_buf;   // drives logic for Tx, the "internal" choice for USR clock
     wire  txoutclk_mmcm_lk;
 
-    parameter BRAM_LIM = 12'h007; // was bff for 256 Bram's: bff, or 8 -> b07.
+    parameter MXBRAMS = 12'h007; // was bff for 256 Bram's: bff, or 8 -> b07.
     parameter GBE_LIM = 16'h080b;  // WORDcount limit. allow extra bytes for MAC preamble, addr's...
 
     reg [15:0]  pkt_lim; // BytecountLimit/2. Plus extra 22 bytes for MAC preamble etc.
@@ -185,13 +196,12 @@ module CSC_GEM_Emulator (
     reg [10:0]  tx_adr, rx_adr, rx_adr_r;
     reg [15:0]  gbe_rxcount;
     reg [7:0]   pkt_id;
-    reg [15:0]  cmd_code, prev_cmd[3:0];
+    reg [15:0]  prev_cmd[3:0];
     reg [11:0]  bk_adr;
     reg         tx_resetdone_r, rx_resetdone_r, rx_resetdone_r2, rx_resetdone_r3, pkt_send;
     wire        tx_resetdone, rx_resetdone;
     reg [7:0]   ovfl_packet;
     reg 	      rx_timeout;
-    reg 	      good_rx_cmd;
     wire        ckgbe;
     wire        rxpll_lk;
     wire [2:0]  rx_bufstat;
@@ -205,17 +215,23 @@ module CSC_GEM_Emulator (
     reg  [1:0]  kchar_r;
     reg  [1:0]  sync_state, data_state;
 
+    wire tx_data      = (data_state==2'h0);
+    wire tx_crc_byte0 = (data_state==2'h1);
+    wire tx_crc_byte1 = (data_state==2'h2);
+    wire tx_eof       = (data_state==2'h3);
+    wire end_of_packet = data_state[1];
+
     reg  [15:0] data_bram, data_bram_r;  // these are the BRAM MUX bus & register
-    wire [63:0] data_oram[BRAM_LIM:12'h000];
+    wire [63:0] data_oram[MXBRAMS:12'h000];
     reg  [63:0] data_iram;
-    reg         cycle4, cmd_f7f7;  // use this to toggle bram WRITE every 4th GbE word during cmd=f7f7
+    reg cycle4;       // use this to toggle bram WRITE every 4th GbE word during cmd=f7f7
+    reg loading_bram; // was called cmdf7f7
 
     reg         crc_en, crc_rst;
     wire [31:0] crc_out;
     reg  [15:0] byte_count;
-    reg  [7:0]  time_r,time_r_i;
 
-    wire [BRAM_LIM:12'h000] sbiterr_oram,  dbiterr_oram;
+    wire [MXBRAMS:12'h000] sbiterr_oram,  dbiterr_oram;
 
     assign f_sclk   = 1'b1;  // to Finisar GbE Transceiver
 
@@ -241,22 +257,13 @@ module CSC_GEM_Emulator (
 
     //  -- right now we access this with CCB base+2a (CSRB6, write a 1 then a 0 to bit2): we get a random count each time
 
-    wire [2:0]  tmb_res_out;
     reg         alct_cfg_out, tmb_cfg_out, results_hold, late_load_done;
-    reg  [4:0]  get_bit_ptr;
-    reg  [19:0] results_r;
     reg  [1:0]  tmb_l1a_relreq;
 
-    reg en_lhcloop, en_lhcloop_r, lhcloop_tog, lhcloop_tog_r;
-    reg 	       en_cabletests, en_fibertests, en_cabletests_r, en_fibertests_r;
-    reg [3:0]   selusr;
     integer     i;
 
     initial begin
-        selusr          = 4'b1101;
-        pb_pulse      = 0;
         ferr_f[7:0]   = 0;
-        err_wait      = 0;
         debounced_bit = 0;
         hold_bit      = 0;
 
@@ -278,9 +285,7 @@ module CSC_GEM_Emulator (
         mac_sync        = 0;
         mac_ack         = 0;
         time_r          = 8'h00;
-        pkt_lim         = 16'd64;
         gbe_rxcount     = 16'h0000;
-        good_rx_cmd     = 1'b0;
         rx_timeout      = 1'b0;
         pkt_id          = 8'h0000;
     end // initial begin
@@ -307,75 +312,75 @@ module CSC_GEM_Emulator (
     bufg_div8clk clk1p6(lhc_clk,!lhc_locked,slwclk,stopped,locked); // slwclk is now 5 MHz again (was 1.6 MHz with div25 and lhc_clk, then 5 MHz using ck125)
 
     // MMCM for 4-phase LHC clock
-    MMCM_ADV
-    #(.BANDWIDTH            ("OPTIMIZED"),
-    .CLKOUT4_CASCADE      ("FALSE"),
-    .CLOCK_HOLD           ("FALSE"),
-    .COMPENSATION         ("ZHOLD"),
-    .STARTUP_WAIT         ("FALSE"),
-    .DIVCLK_DIVIDE        (1),
-    .CLKFBOUT_MULT_F      (25.000),
-    .CLKFBOUT_PHASE       (0.000),
-    .CLKFBOUT_USE_FINE_PS ("FALSE"),
-    .CLKOUT0_DIVIDE_F     (25.000),
-    .CLKOUT0_PHASE        (0.000),
-    .CLKOUT0_DUTY_CYCLE   (0.500),
-    .CLKOUT0_USE_FINE_PS  ("FALSE"),
-    .CLKOUT1_DIVIDE       (25),
-    .CLKOUT1_PHASE        (90.000),
-    .CLKOUT1_DUTY_CYCLE   (0.500),
-    .CLKOUT1_USE_FINE_PS  ("FALSE"),
-    .CLKOUT2_DIVIDE       (25),
-    .CLKOUT2_PHASE        (180.000),
-    .CLKOUT2_DUTY_CYCLE   (0.500),
-    .CLKOUT2_USE_FINE_PS  ("FALSE"),
-    .CLKOUT3_DIVIDE       (25),
-    .CLKOUT3_PHASE        (270.000),
-    .CLKOUT3_DUTY_CYCLE   (0.500),
-    .CLKOUT3_USE_FINE_PS  ("FALSE"),
-    .CLKIN1_PERIOD        (25.0),
-    .REF_JITTER1          (0.010))
-    mmcm_lhc4phase
+    MMCM_ADV #(
+        .BANDWIDTH            ("OPTIMIZED"),
+        .CLKOUT4_CASCADE      ("FALSE"),
+        .CLOCK_HOLD           ("FALSE"),
+        .COMPENSATION         ("ZHOLD"),
+        .STARTUP_WAIT         ("FALSE"),
+        .DIVCLK_DIVIDE        (1),
+        .CLKFBOUT_MULT_F      (25.000),
+        .CLKFBOUT_PHASE       (0.000),
+        .CLKFBOUT_USE_FINE_PS ("FALSE"),
+        .CLKOUT0_DIVIDE_F     (25.000),
+        .CLKOUT0_PHASE        (0.000),
+        .CLKOUT0_DUTY_CYCLE   (0.500),
+        .CLKOUT0_USE_FINE_PS  ("FALSE"),
+        .CLKOUT1_DIVIDE       (25),
+        .CLKOUT1_PHASE        (90.000),
+        .CLKOUT1_DUTY_CYCLE   (0.500),
+        .CLKOUT1_USE_FINE_PS  ("FALSE"),
+        .CLKOUT2_DIVIDE       (25),
+        .CLKOUT2_PHASE        (180.000),
+        .CLKOUT2_DUTY_CYCLE   (0.500),
+        .CLKOUT2_USE_FINE_PS  ("FALSE"),
+        .CLKOUT3_DIVIDE       (25),
+        .CLKOUT3_PHASE        (270.000),
+        .CLKOUT3_DUTY_CYCLE   (0.500),
+        .CLKOUT3_USE_FINE_PS  ("FALSE"),
+        .CLKIN1_PERIOD        (25.0),
+        .REF_JITTER1          (0.010))
+    mmcm_lhc4phase (
     // Output clocks
-    (.CLKFBOUT            (lhcckfbout),
-    .CLKFBOUTB           (),
-    .CLKOUT0             (lhc_ck0),
-    .CLKOUT0B            (),
-    .CLKOUT1             (lhc_ck90),
-    .CLKOUT1B            (),
-    .CLKOUT2             (lhc_ck180),
-    .CLKOUT2B            (),
-    .CLKOUT3             (lhc_ck270),
-    .CLKOUT3B            (),
-    .CLKOUT4             (),
-    .CLKOUT5             (),
-    .CLKOUT6             (),
+        .CLKFBOUT            (lhcckfbout),
+        .CLKFBOUTB           (),
+        .CLKOUT0             (lhc_ck0),
+        .CLKOUT0B            (),
+        .CLKOUT1             (lhc_ck90),
+        .CLKOUT1B            (),
+        .CLKOUT2             (lhc_ck180),
+        .CLKOUT2B            (),
+        .CLKOUT3             (lhc_ck270),
+        .CLKOUT3B            (),
+        .CLKOUT4             (),
+        .CLKOUT5             (),
+        .CLKOUT6             (),
     // Input clock control
-    .CLKFBIN             (lhcckfbout_buf),
-    .CLKIN1              (qpll_ck40),  // qpll_ck40=tmb_clock05p, lhc_ck=tmb_clock0
-    .CLKIN2              (1'b0),
+        .CLKFBIN             (lhcckfbout_buf),
+        .CLKIN1              (qpll_ck40),  // qpll_ck40=tmb_clock05p, lhc_ck=tmb_clock0
+        .CLKIN2              (1'b0),
     // Tied to always select the primary input clock
-    .CLKINSEL            (1'b1),
+        .CLKINSEL            (1'b1),
     // Ports for dynamic reconfiguration
-    .DADDR               (7'h0),
-    .DCLK                (1'b0),
-    .DEN                 (1'b0),
-    .DI                  (16'h0),
-    .DO                  (),
-    .DRDY                (),
-    .DWE                 (1'b0),
+        .DADDR               (7'h0),
+        .DCLK                (1'b0),
+        .DEN                 (1'b0),
+        .DI                  (16'h0),
+        .DO                  (),
+        .DRDY                (),
+        .DWE                 (1'b0),
     // Ports for dynamic phase shift
-    .PSCLK               (1'b0),
-    .PSEN                (1'b0),
-    .PSINCDEC            (1'b0),
-    .PSDONE              (),
+        .PSCLK               (1'b0),
+        .PSEN                (1'b0),
+        .PSINCDEC            (1'b0),
+        .PSDONE              (),
     // Other control and status signals
-    .LOCKED              (lhc_locked),
-    .CLKINSTOPPED        (),
-    .CLKFBSTOPPED        (),
-    .PWRDWN              (1'b0),
-    .RST                 (1'b0));
-
+        .LOCKED              (lhc_locked),
+        .CLKINSTOPPED        (),
+        .CLKFBSTOPPED        (),
+        .PWRDWN              (1'b0),
+        .RST                 (1'b0)
+    );
 
     // Output buffering
     //-----------------------------------
@@ -395,51 +400,71 @@ module CSC_GEM_Emulator (
     wire gtx_reset = reset | !gtx_ready;
     wire rxdv      = ~(|rxer | rx_bufstat[2]) & gbe_fok; // idle is K28.5,D16.2 = BC,50 in time order
 
-    wire [8:0] rd_addr;
-    reg [15:0] rd_ptr=0;
-    reg [7:0]  cmd_code_r=0, cmd_code_rr=0, nbx_r=0, ibx=0;
-    reg 	 dump_enable=0,  dump_loop_i=0, event_enable=0;
-    reg 	 dump_enable_r=0, dump_enable_rr=0, dump_loop_r=0, event_enable_r=0, dump_done=0, event_done=0;
-    assign send_event = dump_enable_rr || (event_enable_r & !event_done);  // use this OR (f3f3 && (bk_adr == v)) to Read Enable the BRAMs
+    wire [8:0]  rd_addr;
+    reg  [15:0] rd_ptr=0;
 
+    // we split the 125 MHz 16 bit cmd into two 62.5 MHz 8-bit commands.
+    reg [15:0]  cmd_code    = 0; // 160 MHz from fiber
+    reg  [7:0]  cmd_code_r  = 0; // 40/62.5 MHz s0
+    reg  [7:0]  cmd_code_rr = 0; // 40/62.5 MHz s1
+
+    reg  [7:0]  ibx=0;
+    reg  [7:0]  nbx_r=0;
+
+    reg dump_loop_i=0;
+    reg dump_loop_r=0;
+
+    reg dump_enable    = 0; // 160 MHz
+    reg dump_enable_r  = 0; // 40/62.5 MHz s0
+    reg dump_enable_rr = 0; // 40/62.5 MHz s1
+
+    reg event_enable   = 0; // 160 MHz
+    reg event_enable_r = 0; // 40/62.5 MHz s0
+
+
+    reg dump_done=0;
+    reg event_done=0;
+
+    wire send_event = dump_enable_rr || (event_enable_r & !event_done);  // use this OR (f3f3 && (bk_adr == v)) to Read Enable the BRAMs
+
+
+    // reset if last command is rewind or write
+    wire last_cmd_is_rewind = {cmd_code_r,cmd_code_rr}==CMD_REWIND;
+    wire last_cmd_is_write  = {cmd_code_r,cmd_code_rr}==CMD_WRITE;
+    wire ibx_reset = (gtx_reset || last_cmd_is_rewind || last_cmd_is_write);
+
+    // Read Clock Domain
+    //-----------------------------------
     always @(posedge rdclk) begin
-        //   always @(posedge ck40) begin  // try rdclk here instead, should be OK.
+    // rdclk switches between 40MHz and 62.5 MHz clock domains based on the state of sel_rdclk
+
         fiber_reset    <= gtx_reset;
         dump_enable_r  <= dump_enable;
         dump_loop_r    <= dump_loop & dump_enable_r; // dump_loop is set in gbe cmd section
         event_enable_r <= event_enable;
+
         nbx_r          <= nbx;
+
         cmd_code_r     <= cmd_code[7:0];
         cmd_code_rr    <= cmd_code_r;
 
-        if      (gtx_reset)      dump_done <= 1'b0;
-        else if (dump_enable_rr) dump_done <= (&rd_ptr[8:1]);  // end dump when rd_ptr is 1FE or 1FF
-        else                     dump_done <= 1'b0;
-
+        dump_done      <= (!gtx_reset && dump_enable_rr) ? (&rd_ptr[8:1]) : 1'b0; // end dump when rd_ptr is 1FE or 1FF
         dump_enable_rr <= (!dump_done | dump_loop_r) & dump_enable & dump_enable_r;
 
-        if (gtx_reset)           event_done <= 1'b0;
-        else if (event_enable_r) event_done <= (ibx==nbx_r);  // event_done is used in gbe cmd section
-        else                     event_done <= 1'b0;
+        // event_done is used in gbe cmd section
+        event_done     <= (!gtx_reset && event_enable_r) ? (ibx==nbx_r) : 1'b0;
 
-        if ( gtx_reset || ((cmd_code_r == 8'hf0)&&(cmd_code_rr == 8'hf0)) || ((cmd_code_r == 8'hf7)&&(cmd_code_rr == 8'hf7)) ) begin
-            rd_ptr       <= 0;
-            ibx          <= 0;
-        end
-        else if (dump_enable_rr | event_enable_r) begin
-            if (!event_done)
-                rd_ptr <= rd_ptr + 1'b1; // JGhere, use rd_ptr as BRAM RdAddr unless f3f3 is set?  use sel_rdclk for it!
-            if (dump_enable_r)
-                ibx <= 0;
-            else if (ibx<nbx_r)
-                ibx <= ibx + 1'b1;
-        end
-        else ibx <= 0;
-    end
+        //
+        if (ibx_reset || !(dump_enable_rr | event_enable_r))
+            ibx <= 8'h0;
+        else
+            ibx <= (dump_enable_r) ? 8'h0 : (ibx<nbx_r) ? ibx + 1'b1 : ibx;
 
-    wire [47:0] gem_datagen;
-    // when button is not held, send auto-gen data from data packer. else send from ethernet input
-    wire gem_data_mux = (hold_bit) ? gem_datagen[47:0] : data_oram[0][47:0];
+        // JGhere, use rd_ptr as BRAM RdAddr unless f3f3 is set ? use sel_rdclk for it!
+        rd_ptr <= ibx_reset ? 16'b0 : (dump_enable_rr || event_enable_r) && (!event_done) ? rd_ptr + 1'b1 : rd_ptr;
+
+    end // close rdclk
+
 
     reg [47:0] fiber_out[7:0];
     always @(negedge ck40) begin  // 80 MHz derived from GTX_TxPLL
@@ -538,15 +563,15 @@ module CSC_GEM_Emulator (
 // Block Ram Generation for Pattern Injection
 //----------------------------------------------------------------------------------------------------------------------
 
-    assign rd_addr = (sel_rdclk)? tx_adr[10:2] : rd_ptr[8:0];
+    assign rd_addr = (sel_rdclk) ? tx_adr[10:2] : rd_ptr[8:0];
 
-    wire bram_rd_en[BRAM_LIM:0];
+    wire bram_rd_en[MXBRAMS:0];
 
     genvar ibram;
     generate
-    for (ibram=12'h000; ibram<=BRAM_LIM; ibram=ibram+1'b1) begin:bramgen
+    for (ibram=12'h000; ibram<=MXBRAMS; ibram=ibram+1'b1) begin:bramgen
 
-        assign bram_rd_en[ibram] = send_event || ((cmd_code == 16'hf3f3) & (bk_adr==ibram) & gtx_ready);
+        assign bram_rd_en[ibram] = send_event || ((cmd_code==CMD_READ) & (bk_adr==ibram) & gtx_ready);
 
         RAMB36E1 #(
             .DOA_REG        (0),         // Optional output register ( 0 or 1)
@@ -599,122 +624,166 @@ module CSC_GEM_Emulator (
     end
     endgenerate
 
+
 //----------------------------------------------------------------------------------------------------------------------
-// GbE Tranceiver
+// Clock Domain Crossing ffs
 //----------------------------------------------------------------------------------------------------------------------
 
-    mac_crc  mac_crc32(gbe_txdat, crc_en, crc_out, crc_rst, gbe_txclk2);
+
+    // slow clock startup counter
+    //----------------------------------------------------------------------------------------------------------------------
+
+    always @(posedge slwclk or posedge reset) // everything that uses 1.6 MHz clock with simple Reset (from lhc_clk)
+    begin
+        if (reset)
+            time_count <= 0;
+        else begin
+            if (gtx_ready && time_count < 8'hfe)
+                time_count <= time_count + 1'b1; // use to delay startup; ends.
+        end
+    end
+
+
+    // transfer slow clk startup counter to GbE USR clock domain
+    always @(posedge gbe_txclk2) begin
+        time_r_i  <= time_count;
+    end
+
+    always @(posedge gbe_txclk2 or posedge reset) begin
+        time_r    <= (reset) ? 8'h00 : time_r_i;
+    end
 
     // everything that uses GbE USR clock, no Reset
-    always @(posedge gbe_txclk2)
-    begin
+    always @(posedge gbe_txclk2) begin
         tx_out_r  <= tx_out;
         tx_kout_r <= tx_kout;
-        time_r_i  <= time_count;
     end
 
     // everything using GbE USR clock w/simple Reset
     always @(posedge gbe_txclk2 or posedge reset)
     begin
-        if (reset) begin
-            time_r <= 8'h00;
-            tx_resetdone_r <= 0;
-            rx_resetdone_r <= 0;
+        tx_resetdone_r <= (reset) ? 1'b0 : tx_resetdone;
+        rx_resetdone_r <= (reset) ? 1'b0 : rx_resetdone;
+    end
+
+//----------------------------------------------------------------------------------------------------------------------
+// Ethernet crc calculation
+//----------------------------------------------------------------------------------------------------------------------
+    mac_crc  mac_crc32(gbe_txdat, crc_en, crc_out, crc_rst, gbe_txclk2);
+
+//----------------------------------------------------------------------------------------------------------------------
+// GbE Tranceiver
+//----------------------------------------------------------------------------------------------------------------------
+
+    wire dump_enable_next = (!dump_enable&debounced_bit) | (cmd_code==CMD_DUMP);
+
+    reg   event_done_r = 0, dump_done_r = 0, dump_loop = 0;
+
+    reg [7:0]  nbx_i=0, nbx=0;
+    wire rxdat_is_cmd = (gbe_rxdat&16'hf0f0)==16'hf0f0 && (gbe_rxdat&16'h0f0f)!=16'h0f0f;
+
+
+
+    // command decoding
+    //----------------------------------------------
+    always @(posedge gbe_txclk2 or posedge gtx_reset) // everything using GbE USR clock w/GTX_Reset
+    begin
+        if (gtx_reset) begin
+            pkt_lim     <= 16'd64;
+            sel_rdclk   <= 1'b0;
+            dump_enable <= 1'b0;
+            event_enable <= 1'b0;
         end
         else begin
-            tx_resetdone_r <= tx_resetdone;
-            rx_resetdone_r <= rx_resetdone;
-            time_r <= time_r_i;  // transfer slow clk time counter to GbE USR clock domain
+
+            // load counter2 to READ registers and send it out
+            //-------------------------------------------------------------
+            if      (cmd_code == CMD_READ)  pkt_lim <= 16'd2061; // 16'd61 special test size 100 bytes.  later will be 4 KB
+            else if (cmd_code == CMD_WRITE) pkt_lim <= 16'd2048; // just over 4 KB for good Rx/Tx BRAM loading overlap
+            else                            pkt_lim <= 16'd36;   // our usual 50-byte size is default; F3F3 is the special 4 KB count
+
+            byte_count <= 16'hffff&((pkt_lim*2) - 16'd22); // Need BYTES; subtract preamble bytes etc.
+
+            // dump enable
+            // dumps entire bram contents
+            //---------------------------------------------
+            if      (dump_enable_next)        dump_enable <= 1'b1;         // was !dump_done_r ...before that was 1'b1;.  dump_done is driven by ck40
+            else if (cmd_code[15:12] == 4'hF) dump_enable <= 1'b0;         // stop dump on any non-FDFD command: F0F0, F3F3, F7F7, FEFE...
+            else if (dump_enable)             dump_enable <= !dump_done_r; // dump_done is driven by ck40   ... was 1'b1;
+            else                              dump_enable <= dump_enable;
+
+            // event enable
+            // sends a single bx's data from the bram
+            //---------------------------------------------
+
+            if      (cmd_code == CMD_SEND) event_enable <= !event_done_r;  // event_done is driven by ck40
+            else if (cmd_code[15:12] == 4'hF) event_enable <= 1'b0;           // stop dump on any non-FEFE command: F0F0, F3F3, F7F7, FDFD...
+            else                              event_enable <= event_enable;
+
+            // control rdclk source
+            //---------------------------------------------
+            sel_rdclk <= (cmd_code==CMD_READ); // JGhere, maybe this will change the clock before the Read is finished, so delay it?
         end
     end
 
 
-    wire dump_enable_next = (!dump_enable & debounced_bit) | (cmd_code == 16'hFDFD);
-    reg   event_done_r = 0, dump_done_r = 0, dump_loop = 0;
-    reg [7:0]  nbx_i=0, nbx=0;
+    //
+    //----------------------------------------------
     always @(posedge gbe_txclk2 or posedge gtx_reset) // everything using GbE USR clock w/GTX_Reset
     begin
         if (gtx_reset) begin
-            comma_align     <= 0;
-            counter_send    <= 0;
-            l_kchar         <= 0;
-            ll_kchar        <= 0;
-            l_gbe_rxdat     <= 0;
-            ll_gbe_rxdat    <= 0;
-            kchar_r         <= 0;
-            ovfl_packet     <= 0;
             counter         <= 16'h0000;
-            ireg            <= 0;
-            tx_adr          <= 0;
-            rx_adr          <= 0;
-            rx_adr_r        <= 0;
-            cycle4          <= 0;
-            cmd_f7f7        <= 0;
-            pkt_id          <= 8'h0000;
-            gbe_rxcount     <= 16'h0000;
-            cmd_code        <= 16'h0000;
-            bk_adr          <= 12'h000;
-            gbe_txdat       <= 16'h50bc;  // <-- idle 28.5/16.2
-            gbe_kout        <= 2'h1;
-            sync_state      <= 2'h0;
-            data_state      <= 2'h0;
-            mac_seek        <= 0;
-            mac_sync        <= 0;
-            mac_ack         <= 0;
-            rx_resetdone_r2 <= 0;
-            rx_resetdone_r3 <= 0;
+            comma_align     <= 0;
             crc_rst         <= 1;
-            crc_en          <= 0;
-            pkt_send        <= 0; // 1st data word @counter == 12 --> 11 extra words, so subtract 22 bytes.
-            good_rx_cmd     <= 1'b0;
-            rx_timeout      <= 1'b0;
             data_bram       <= 16'hd1d0;
             data_bram_r     <= 16'he4e2;
-            sel_rdclk       <= 1'b0;
-            event_done_r    <= 0;
             dump_done_r     <= 0;
-            dump_loop_i     <= 0;
             dump_loop       <= 0;
-            nbx_i           <= 0;
+            event_done_r    <= 0;
             nbx             <= 0;
+            pkt_id          <= 8'h0000;
+            rx_resetdone_r2 <= 0;
+            rx_resetdone_r3 <= 0;
+            pkt_send        <= 0; // 1st data word @counter == 12 --> 11 extra words, so subtract 22 bytes.
         end
 
         else begin // Not Reset case
+
+            // domain crossing ffs
             event_done_r    <= event_done;
             dump_done_r     <= dump_done;
+
             rx_resetdone_r2 <= rx_resetdone_r;
             rx_resetdone_r3 <= rx_resetdone_r2;
 
-            if (rx_resetdone_r3) comma_align <= 1; // maybe use time_r > 8'h10 ? // a latch ?? srs?
+            // maybe use time_r > 8'h10 ?
+            // driven high to signal the gtx to perform comma alignment
+            // enable once the tranceiver is reset
+            //-------------------------------------------------------------
+            comma_align <= (rx_resetdone_r3)    ? 1'b1 : comma_align;
 
-            crc_rst   <= (data_state == 2'h2) ? 1'b1 : 1'b0;  // needs one cycle during state 3
-            dump_loop <= (dump_done_r)        ? 1'b0 : dump_loop_i; // sets FPGA for continuous loop of sending all patterns
-            nbx       <= (event_done_r)       ? 1'b0 : nbx_i; // tells how many BX to send for this event (8 bits)
 
-            if      (dump_enable_next)        dump_enable <= 1'b1;  // was !dump_done_r ...before that was 1'b1;.  dump_done is driven by ck40
-            else if (cmd_code[15:12] == 4'hF) dump_enable <= 1'b0;  // stop dump on any non-FDFD command: F0F0, F3F3, F7F7, FEFE...
-            else if (dump_enable)             dump_enable <= !dump_done_r;  // dump_done is driven by ck40   ... was 1'b1;
-            else                              dump_enable <= dump_enable;
+            // needs one cycle during state 3
+            // finished sending 2nd crc byte, now reset the mac_crc machine
+            //--------------------------------------------------------------
+            crc_rst <= (tx_crc_byte1) ? 1'b1 : 1'b0;
 
-            if      (cmd_code == 16'hFEFE)    event_enable <= !event_done_r;  // event_done is driven by ck40
-            else if (cmd_code[15:12] == 4'hF) event_enable <= 1'b0;           // stop dump on any non-FEFE command: F0F0, F3F3, F7F7, FDFD...
-            else                              event_enable <= event_enable;
+            // latch mode to set FPGA for continuous loop of sending all patterns
+            //-------------------------------------------------------------
+            dump_loop <= (dump_done_r) ? 1'b0 : dump_loop_i;
 
-            if (cmd_code == 16'hF3F3) sel_rdclk <= 1'b1;
-            else                      sel_rdclk <= 1'b0;  // JGhere, maybe this will change the clock before the Read is finished, so delay it?
+            // latch number of bx to send (8 bits)
+            //-----------------------------------------
+            nbx <= (event_done_r) ? 8'b0 : nbx_i;
 
-            // load counter2 to READ registers and send it out
-            if      (cmd_code == 16'hf3f3) pkt_lim <= 16'd2061;   // 16'd61 special test size 100 bytes.  later will be 4 KB
-            else if (cmd_code == 16'hf7f7) pkt_lim <= 16'd2048; // just over 4 KB for good Rx/Tx BRAM loading overlap
-            else                           pkt_lim <= 16'd36; // our usual 50-byte size is default; F3F3 is the special 4 KB count
 
-            byte_count <= 16'hffff&((pkt_lim*2) - 16'd22); // Need BYTES; subtract preamble bytes etc.
-
-            /* BRAM->PC */
             // select what goes where for the readout BRAM bus
-            if ((bk_adr < 12'h000) || (bk_adr > BRAM_LIM))
-                data_bram <= 16'h0a0f; // limited range of bk_adr space
-            else if (cmd_code == 16'hf3f3) begin
+            //----------------------------------------------------------------------------
+
+            data_bram_r  <= data_bram;
+
+            if (bk_adr>MXBRAMS) data_bram <= 16'h0a0f; // limited range of bk_adr space
+            else if (cmd_code == CMD_READ) begin
                 case (tx_adr[1:0])
                     2'b00: data_bram <= data_oram[bk_adr][63:48]; // correct for latency of BRAM readout response
                     2'b01: data_bram <= data_oram[bk_adr][15:0];
@@ -725,36 +794,52 @@ module CSC_GEM_Emulator (
             else
                 data_bram <= 16'hdfd8;
 
-            data_bram_r  <= data_bram;
 
-            if (data_state[1]) begin  // end of sent data packet
-                //	      cmd_code             <= 16'h0000;
-                if (|cmd_code)
-                    cmd_code <= 16'h0000;
-                bk_adr       <= 12'h000;
-                pkt_send     <= 1'b0;
-                counter      <= 0;
-                if (data_state == 2'h2)
-                    pkt_id <= pkt_id + 1'b1;
-            end
-            else if (rx_timeout) begin
-                bk_adr   <= 12'h000;
-                counter  <= 0;
-                pkt_send <= 1'b0;
-            end
-            else if (!sync_state[0] && pkt_send) begin
-                counter <= counter + 1'b1;  // verified that sync[0] ends OFF
-            end
-            else if (!sync_state[0] && time_r[7] && (cmd_code > 16'h0000)) pkt_send <= 1'b1;
+            counter  <= (end_of_packet || rx_timeout) ? 16'h0000 : (!sync_state[0] && pkt_send) ? counter + 1'b1 : counter;
+            pkt_id   <=  end_of_packet && tx_crc_byte1 ? pkt_id + 1'b1 : pkt_id;
+
+            if      (end_of_packet || rx_timeout )                                         pkt_send <= 1'b0;
+            else if (!pkt_send && !sync_state[0] && startup_done && (cmd_code > 16'h0000)) pkt_send <= 1'b1;
+            else                                                                           pkt_send <= pkt_send;
+
+        end
+    end
+
+    //------------------------------------------------------------------------------------------------------------------
+    // packet construction
+    //------------------------------------------------------------------------------------------------------------------
+    always @(posedge gbe_txclk2 or posedge gtx_reset) // everything using GbE USR clock w/GTX_Reset
+    begin
+        if (gtx_reset) begin
+            counter_send    <= 0;
+            crc_en          <= 0;
+            data_state      <= 2'h0;
+            gbe_kout        <= 2'h1;
+            gbe_txdat       <= 16'h50bc;  // <-- idle 28.5/16.2
+            ireg            <= 0;
+            kchar_r         <= 0;
+            l_gbe_rxdat     <= 0;
+            l_kchar         <= 0;
+            ll_gbe_rxdat    <= 0;
+            ll_kchar        <= 0;
+            mac_ack         <= 0;
+            mac_seek        <= 0;
+            mac_sync        <= 0;
+            sync_state      <= 2'h0;
+            tx_adr          <= 0;
+        end
+
+        else begin // Not Reset case
 
 
-            /* GbE Tx to PC */
+            // GbE Tx to PC
+            //--------------------------------------------------------
             if ((counter > 0) && (counter <= pkt_lim)) begin  // put data on gbe_txdat after preamble, MACaddr's & Length
                 counter_send <= 1;
                 if (counter == 16'd1) begin
                     gbe_txdat <= 16'h55fb;
                     gbe_kout  <= 2'h1;
-                    tx_adr    <= 0; /* tx_adr == BRAM readout bus */
+                    tx_adr    <= 11'h0; /* tx_adr == BRAM readout bus */
                 end
                 else if (counter < 16'd5) begin
                     gbe_txdat <= {counter[2],15'h5555};
@@ -788,11 +873,18 @@ module CSC_GEM_Emulator (
                     //  F5 => 0 + (cnt[0]&1), alternates ireg increments for 32-bit register readout.
                     //  F6 => 1 + (cnt[0]&0), continuous increments for 16-bit register readout.
 
+
+
+
+
                     // JGhere: next 3 lines are dummies, can be deleted...  not needed by the CSC_GEM test stand!
-                    if(cmd_code[1]^cmd_code[0]) begin  // generalized for f1f1 or f2f2 ( == !f3f3 && !f4f4) or f5 or f6...f9, fa, fd, fe
-                        gbe_txdat <= 16'ha1a1;
-                    end
-                    else if (cmd_code[2]) begin  // Function4 is active, or f7 or fc, ff.  send cmd_code first.
+                    //if(cmd_code[1]^cmd_code[0]) begin  // generalized for f1f1 or f2f2 ( == !f3f3 && !f4f4) or f5 or f6...f9, fa, fd, fe
+                    //    gbe_txdat <= 16'ha1a1;
+                    //end
+
+                    // cmd_code[2]
+                    // any command except read
+                    if (cmd_code[2]) begin  // Function4 is active, or f7 or fc, ff.  send cmd_code first.
                         if (counter < 16'd14)
                             gbe_txdat <= {4'hd,bk_adr[11:0]};    //  <-- 2nd word returns the bk_adr
                         else
@@ -802,7 +894,10 @@ module CSC_GEM_Emulator (
                         gbe_txdat <= prev_cmd[counter[1:0]];    //  returns preveious few cmd_codes, repeats to end of packet
                     end
 
-                    else if (bk_adr <= BRAM_LIM) begin  // this is data_bram range.  for f3f3, f8f8, fbfb...
+
+
+
+                    else if (bk_adr <= MXBRAMS) begin  // this is data_bram range.  for f3f3, f8f8, fbfb...
                         if (counter < 16'd14)
                             gbe_txdat <= {4'hd,bk_adr[11:0]};    //  <-- 2nd word returns the bk_adr
                         else
@@ -814,8 +909,10 @@ module CSC_GEM_Emulator (
                     end
                 end // if (counter >= 16'd13)
             end // if (counter > 0 && counter <= GBE_LIM)
+
+
             //jg note: the MAC_ACK etc still don't work (v11p5)...do we care?
-            else if (!time_r[7] || sync_state[0]) begin  // send Sync "pairs" for a while after Reset
+            else if (!startup_done || sync_state[0]) begin  // send Sync "pairs" for a while after Reset
                 if (time_r[6] && time_r[1]) begin
                     mac_seek <= (ll_kchar && !l_kchar && ll_gbe_rxdat == 16'h42bc);
                     if (mac_seek && l_kchar && l_gbe_rxdat == 16'hb5bc)
@@ -826,21 +923,27 @@ module CSC_GEM_Emulator (
                 else mac_seek <= 0;
 
                 case (sync_state)
-                    2'b00: gbe_txdat <= 16'h42bc;
-                    2'b10: gbe_txdat <= 16'hb5bc;
+                    2'b00:   gbe_txdat <= 16'h42bc;
+                    2'b10:   gbe_txdat <= 16'hb5bc;
                     default: gbe_txdat <= {1'b0,mac_sync,14'h0000}; // <-- we want this to be the final sync state.
                 endcase
                 gbe_kout  <= ((~sync_state) & 2'b01);
                 sync_state <= sync_state + 1'b1;
             end
             else  begin // otherwise send Idles, allows time for Rx Checking
+                // at reset data_state = 0
+                // when counter_send goes high, data state is set to one, then it starts counting
+
+
+                if      (counter_send)  data_state <= 2'h1;
+                else if (data_state==0) data_state <= data_state;
+                else                    data_state <= data_state + 1'b1;
+
                 counter_send <= 0;
-                crc_en <= 0;
-                gbe_txdat <= 16'h50bc;  // <-- idle 28.5/16.2
-                gbe_kout <= 2'h1;
-                tx_adr <= 0;
-                if (counter_send) data_state <= 2'h1;
-                else if (data_state > 2'h0) data_state <= data_state + 2'h1;
+                crc_en       <= 0;
+                gbe_txdat    <= 16'h50bc;  // <-- idle 28.5/16.2
+                gbe_kout     <= 2'h1;
+                tx_adr       <= 0;
             end
 
             ll_kchar     <= l_kchar;
@@ -848,8 +951,40 @@ module CSC_GEM_Emulator (
             kchar_r      <= rxer[1:0];
             ll_gbe_rxdat <= l_gbe_rxdat;
             l_gbe_rxdat  <= gbe_rxdat;
+        end
+    end
 
-            /* GbE Rx from PC */
+    // GbE Rx from PC
+    //--------------------------------------------------------
+    always @(posedge gbe_txclk2 or posedge gtx_reset) // everything using GbE USR clock w/GTX_Reset
+    begin
+        if (gtx_reset) begin
+            ovfl_packet     <= 0;
+            rx_timeout      <= 1'b0;
+            gbe_rxcount     <= 16'h0000;
+            bk_adr          <= 12'h000;
+            rx_adr_r        <= 0;
+            cmd_code        <= 16'h0000;
+            dump_loop_i     <= 0;
+            nbx_i           <= 0;
+            cycle4          <= 0;
+            loading_bram    <= 0;
+            prev_cmd[0]     <= 16'h0;
+            prev_cmd[1]     <= 16'h0;
+            prev_cmd[2]     <= 16'h0;
+            prev_cmd[3]     <= 16'h0;
+            rx_adr          <= 0;
+            data_iram[15:0] <= 16'h0000;
+            data_iram[31:16]<= 16'h0000;
+            data_iram[47:32]<= 16'h0000;
+            data_iram[63:48]<= 16'h0000;
+        end
+        else
+        begin
+
+            bk_adr   <= (end_of_packet || rx_timeout) ? 12'h000  : bk_adr;
+            cmd_code <=  end_of_packet && |cmd_code ? 16'h0000 : cmd_code;
+
             if (time_r[7] && rxdv) begin // get command from first 1-2 data bytes of packet
                 if (gbe_rxcount == 16'd4407) begin  // tuned to handle weird .5 sec rxdv case after Reset.
                     ovfl_packet <= ovfl_packet + 1'b1; // tracks when a rx packet times-out, over jumbo GbE limit
@@ -857,102 +992,113 @@ module CSC_GEM_Emulator (
                 end
                 else gbe_rxcount <= gbe_rxcount + 1'b1;
 
-                if (cmd_code != 16'hf7f7) rx_adr_r[10:0] <= 11'h000;
+                if (cmd_code != CMD_WRITE) rx_adr_r[10:0] <= 11'h000;
                 else if (cycle4) rx_adr_r <= rx_adr;
 
-                if (rx_timeout) begin
-                    rx_adr <= 0;
-                    tx_adr <= 0;
-                end
+                // timeout reset
+                rx_adr <= (rx_timeout) ? 11'h0 : rx_adr;
 
                 // JGhere, Break down GbE packet Rx from the PC:
-                if ( rx_timeout | event_done_r | dump_done_r ) begin
-                    cmd_code    <= 16'h0000;
-                    dump_loop_i <= 0;
-                    nbx_i       <= 0;
-                    cycle4      <= 0;
-                    cmd_f7f7    <= 0;
+                if ( rx_timeout | event_done_r | dump_done_r )
+                begin
+                    cmd_code      <= 16'h0000;
+                    dump_loop_i   <= 0;
+                    nbx_i         <= 0;
+                    cycle4        <= 0;
+                    loading_bram  <= 0;
                 end
-                else if ( (gbe_rxcount == 16'h0003) && (cmd_code == 16'h0000)  ) begin
-                    if ( (gbe_rxdat&16'hf0f0)==16'hf0f0 && (gbe_rxdat&16'h0f0f)!=16'h0f0f ) begin
+
+                // latch command
+                else if ((gbe_rxcount==16'h0003) && (cmd_code==16'h0000) && rxdat_is_cmd)
+                begin
                         cmd_code     <= gbe_rxdat; //   ^^^ make sure cmd code looks valid ^^^
                         prev_cmd[0]  <= gbe_rxdat;
                         prev_cmd[1]  <= prev_cmd[0];
                         prev_cmd[2]  <= prev_cmd[1];
                         prev_cmd[3]  <= prev_cmd[2];
-                        good_rx_cmd  <= 1'b1;
                         rx_adr[10:0] <= 11'h000;
                         cycle4       <= 0;
-                        cmd_f7f7     <= 0;
-                    end
+                        loading_bram <= 0;
                 end
-                else if ( |cmd_code && (gbe_rxcount == 16'h0004)) begin
-                    if (cmd_code == 16'hFDFD) dump_loop_i <= (gbe_rxdat[3:0]==4'hC);
-                    else dump_loop_i <= 0;
-                    if (cmd_code == 16'hFEFE) nbx_i <= (gbe_rxdat[7:0]);
-                    else nbx_i <= 0;
-                    if ( (cmd_code == 16'hf3f3 || cmd_code == 16'hf7f7) && (gbe_rxdat[11:8] == 4'h0) ) bk_adr <= gbe_rxdat[11:0];
-                    else bk_adr <= 0;
+
+                // parse_address
+                //-----------------------------------------------
+                else if (|cmd_code && (gbe_rxcount==16'h0004))
+                begin
+                    dump_loop_i <= (cmd_code==CMD_DUMP) ? (gbe_rxdat[3:0]==4'hC) : 1'b0;
+                    nbx_i       <= (cmd_code==CMD_SEND) ? (gbe_rxdat[7:0])       : 8'b0;
+                    bk_adr      <= (cmd_code==CMD_READ || cmd_code==CMD_WRITE) && (gbe_rxdat[11:8]==4'h0) ? gbe_rxdat[11:0] : 12'b0;
                     data_iram[15:0] <= 16'hdddd;
                 end
-                /* PC->BRAM*/
-                else if (gbe_rxcount > 16'h0004 && (cmd_code == 16'hf7f7) && (bk_adr <= BRAM_LIM) ) begin
-                    if (gbe_rxcount == 16'h0005)
-                        cmd_f7f7 <= (cmd_code == 16'hf7f7);
 
-                    cycle4 <= (cmd_f7f7 & (rx_adr[1:0] == 2'h3)); // cannot begin before rx_count=6
+                // parse_data
+                //------------------------------------------------------------------------------------------
+                else if (gbe_rxcount > 16'h0004 && (cmd_code == CMD_WRITE) && (bk_adr <= MXBRAMS) )
+                begin
+                    cycle4   <= (loading_bram & (rx_adr[1:0] == 2'h3)); // cannot begin before rx_count=6
 
-                    if (rx_adr != 11'h7ff)
-                        rx_adr <= rx_adr + 1'b1;
-                    else
-                        cmd_f7f7 <= 0;
+                    // at the first byte of the data, check if the command is command write.
+                    loading_bram <= (gbe_rxcount == 16'h0005) ? 1'b1 : loading_bram;
+                    loading_bram <= (rx_adr==11'h7ff)         ? 1'b0 : loading_bram;
 
-                    if      (rx_adr[1:0] == 2'h0) data_iram[15:0]  <= gbe_rxdat[15:0];
-                    else if (rx_adr[1:0] == 2'h1) data_iram[31:16] <= gbe_rxdat[15:0];
-                    else if (rx_adr[1:0] == 2'h2) data_iram[47:32] <= gbe_rxdat[15:0];
-                    else                          data_iram[63:48] <= gbe_rxdat[15:0];
+                    // loop over block ram addresses
+                    rx_adr   <= (rx_adr==11'h7ff) ? rx_adr : rx_adr + 1'b1;
+
+                    case (rx_adr[1:0])
+                        2'h0:    data_iram[15:0]  <= gbe_rxdat[15:0];
+                        2'h1:    data_iram[31:16] <= gbe_rxdat[15:0];
+                        2'h2:    data_iram[47:32] <= gbe_rxdat[15:0];
+                        default: data_iram[63:48] <= gbe_rxdat[15:0];
+                    endcase
                 end
+
+                // fini
+                //-----------------------------------------
                 else begin
-                    good_rx_cmd <= 1'b0;
                     cycle4 <= 0;
                 end // else: !if(gbe_rxcount == 3 or 4, or cmd=f7f7)
+
             end  // if (time_r[7] & rxdv & correct switch state)
 
             else  begin  // if (rxdv == 0) or time_r[7]==0
-                gbe_rxcount <= 16'h0000;
-                rx_timeout  <= 1'b0;
-                cycle4      <= 0;
-                cmd_f7f7    <= 0;
+                gbe_rxcount  <= 16'h0000;
+                rx_timeout   <= 1'b0;
+                cycle4       <= 0;
+                loading_bram <= 0;
             end
         end // else: !if(gtx_reset)
-    end
+
+    end // @(posedge gbe_txclk2 or posedge gtx_reset)
+
+//----------------------------------------------------------------------------------------------------------------------
+// transmit data state
+//----------------------------------------------------------------------------------------------------------------------
 
     always @(*) begin
         case (data_state)
-            2'h1:    begin  // <-- last "counter_send" is in time with data_state 1
-                        tx_out[15:0] = crc_out[15:0];  // send out CRC "MSB-first"; it's already inverted and backwards
-                        tx_kout = 2'h0;
-                    end
-            2'h2:    begin
-                        tx_out[15:0] = crc_out[31:16];
-                        tx_kout = 2'h0;
-                    end
-            2'h3:    begin
-                        tx_out[15:0] = 16'hf7fd; // eof code
-                        tx_kout = 2'h3;
-                    end
-            default: begin    // tx_out control returns to gbe_txdat w/Idles
-                        tx_out[15:0] = gbe_txdat[15:0];
-                        tx_kout = gbe_kout;
-                    end
+            2'h0: tx_out[15:0] = gbe_txdat[15:0];
+            2'h1: tx_out[15:0] = crc_out[15:0];  // send out CRC "MSB-first"; it's already inverted and backwards
+            2'h2: tx_out[15:0] = crc_out[31:16];
+            2'h3: tx_out[15:0] = CMD_EOF;
+        endcase
+
+        case (data_state)
+            2'h1:    tx_kout = 2'h0;
+            2'h2:    tx_kout = 2'h0;
+            2'h3:    tx_kout = 2'h3;
+            default: tx_kout = gbe_kout;
         endcase
     end  // always @ (*)
+
+//----------------------------------------------------------------------------------------------------------------------
+// GTX Instantiation
+//----------------------------------------------------------------------------------------------------------------------
 
     wire [1:0]  rx_comma;
     wire [1:0]  rx_disp;  // other signals for GTX
     wire [3:0]  ignore;  // outputs from GTX we don't care about
     wire [1:0]  rx_lostsync;
-    wire  gbe_tx_outclk; // out from Tx PLL
+    //wire  gbe_tx_outclk; // out from Tx PLL
 
     GBE_T20R20 gbe_gtx (
         gbe_refck,         // GTX0_DOUBLE_RESET_CLK_IN,
@@ -1025,8 +1171,8 @@ module CSC_GEM_Emulator (
     wire gbe_sump =  (|rx_comma)
                     |(|rx_disp)
                     |(|ignore)
-                    |(|rx_lostsync)
-                    |( gbe_tx_outclk);
+                    |(|rx_lostsync);
+
 
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -1152,23 +1298,6 @@ module CSC_GEM_Emulator (
             qpll_lock_lost <= !qpll_lock | qpll_lock_lost;
         end
     end
-
-//----------------------------------------------------------------------------------------------------------------------
-// slow clock
-//----------------------------------------------------------------------------------------------------------------------
-
-    always @(posedge slwclk or posedge reset) // everything that uses 1.6 MHz clock with simple Reset (from lhc_clk)
-    begin
-        // reset
-        if (reset) begin
-            time_count <= 0;
-        end
-        else begin
-
-
-        if (gtx_ready && time_count < 8'hfe) time_count <= time_count + 1'b1; // use to delay startup; ends.
-        end  // close !reset
-    end // close always
 
 //----------------------------------------------------------------------------------------------------------------------
 // snap12 mmcm clock manager
