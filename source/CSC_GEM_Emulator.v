@@ -88,7 +88,6 @@ module CSC_GEM_Emulator (
     input         pb,  // push button
     input  [8:7]  sw,
 
-
 // Ethernet
     input 	      ck_gben, ck_gbep,
     input 	      gbe_rxn, gbe_rxp,
@@ -114,24 +113,41 @@ module CSC_GEM_Emulator (
     output            r12_sclk
 ) /* synthesis syn_useioff = 1 */;
 
-// writes to block ram
-parameter CMD_WRITE   = 16'hf7f7; // 16'b1111011111110111
-// reads from block ram
-parameter CMD_READ    = 16'hf3f3; // 16'b1111001111110011
-// dump block ram contents
-parameter CMD_DUMP = 16'hfdfd; // 16'b1111110111111101
-
-
-// not used in sw
-parameter CMD_SEND = 16'hfefe; // 16'b1111111011111110
-parameter CMD_EOF     = 16'hf7fd; // 16'b1111011111111101
-parameter CMD_REWIND  = 16'hf0f0; // 16'
-
-
 //----------------------------------------------------------------------------------------------------------------------
-// Interconnects
+// Command Parameters
 //----------------------------------------------------------------------------------------------------------------------
 
+    // writes to block ram
+    parameter CMD_WRITE   = 16'hf7f7; // 16'b1111011111110111
+    // reads from block ram
+    parameter CMD_READ    = 16'hf3f3; // 16'b1111001111110011
+    // dump block ram contents
+    parameter CMD_DUMP    = 16'hfdfd; // 16'b1111110111111101
+
+    // not used in sw
+    parameter CMD_SEND    = 16'hfefe; // 16'b1111111011111110
+    parameter CMD_REWIND  = 16'hf0f0; // 16'
+
+
+
+    parameter EOF     = 16'hf7fd; // 16'b1111011111111101
+
+//----------------------------------------------------------------------------------------------------------------------
+// Register Declarations and Interconnects
+//----------------------------------------------------------------------------------------------------------------------
+
+    reg [22:0]  free_count;
+    reg 	      free_tc;
+    reg 	      slow_tc;
+    reg [7:0]   time_count;
+    reg [7:0]   time_r,time_r_i;
+    wire        zero = 1'b0;
+    wire        one = 1'b1;
+    wire [1:0]  zero2 = 0;
+    wire [12:0] low = 0;
+
+
+    wire        startup_done = time_r[7];
     // snap12 GTX signals
     //------------------------------------------------------------------------------------------------------------------
     assign gtl_loop = 1'b0; // JRG: always set LOW (SEU danger, make OPEN --PD)   **Now INPUT for Mezz 2012!**
@@ -149,23 +165,10 @@ parameter CMD_REWIND  = 16'hf0f0; // 16'
     parameter SEEDBASE = 64'h8731c6ef4a5b0d29;
     parameter SEEDSTEP = 16'hc01d;
 
-    reg [5:0]   ireg;
-    reg [22:0]  free_count;
-    reg 	      free_tc;
-    reg 	      slow_tc;
-    reg [7:0]   time_count;
-    reg [7:0]   time_r,time_r_i;
-
-    wire        startup_done = time_r[7];
 
     wire        ext_rst, force_err, stat0;  // stat[3:0] =  cfebemul_in[2,3,1,4] on Emul board!
     wire        ck125, ck160, lhc_ck, lhc_clk, qpll_ck40, slwclk;   // ext 125 usr, QPLL160, ccb_ck40, QPLL40, ccb_ck40/25=1.6MHz
     wire        lhc_ck0, lhc_ck90, lhc_ck180, lhc_ck270, lhcckfbout, lhcckfbout_buf;
-    wire        zero = 1'b0;
-    wire        one = 1'b1;
-    wire [1:0]  zero2 = 0;
-    wire [12:0] low = 0;
-
 
     wire        ck40, ck40buf, rdclk;
     reg 	      sel_rdclk;
@@ -182,17 +185,18 @@ parameter CMD_REWIND  = 16'hf0f0; // 16'
     reg 	       hold_bit;        // debounced !pb signal, held until button release
     reg 	       debounced_bit;   // sets one pulse for 200 ns  (5 MHz clock)
 
-    // GbE and BRAM use:
+    // GbE and BRAM
     //---------------------------------------------------------------------
     wire  gbe_refck; // GTXE1 ref clk, used for MGTref and DoubleReset clock
     wire  gbe_txclk2, gbe_txclk2_buf;   // drives logic for Tx, the "internal" choice for USR clock
     wire  txoutclk_mmcm_lk;
 
-    parameter MXBRAMS = 12'h007; // was bff for 256 Bram's: bff, or 8 -> b07.
+    parameter MXBRAMS = 12'd7; // was bff for 256 Bram's: bff, or 8 -> b07.
     parameter GBE_LIM = 16'h080b;  // WORDcount limit. allow extra bytes for MAC preamble, addr's...
+    parameter MX_RX_ADR = 11'h7ff;
 
     reg [15:0]  pkt_lim; // BytecountLimit/2. Plus extra 22 bytes for MAC preamble etc.
-    reg [15:0]  counter;  // ^^^ 1st data word @ counter == 12; need 11 extra word counts, 22 bytes.
+    reg [15:0]  pkt_counter;  // ^^^ 1st data word @ counter == 12; need 11 extra word counts, 22 bytes.
     reg [10:0]  tx_adr, rx_adr, rx_adr_r;
     reg [15:0]  gbe_rxcount;
     reg [7:0]   pkt_id;
@@ -214,6 +218,8 @@ parameter CMD_REWIND  = 16'hf0f0; // 16'
     reg 	      l_kchar, ll_kchar, mac_seek, mac_sync, mac_ack, counter_send;
     reg  [1:0]  kchar_r;
     reg  [1:0]  sync_state, data_state;
+
+    wire synchronized = startup_done && !sync_state[0];
 
     wire tx_data      = (data_state==2'h0);
     wire tx_crc_byte0 = (data_state==2'h1);
@@ -290,11 +296,9 @@ parameter CMD_REWIND  = 16'hf0f0; // 16'
         pkt_id          = 8'h0000;
     end // initial begin
 
-
 //----------------------------------------------------------------------------------------------------------------------
 // Clock Generation
 //----------------------------------------------------------------------------------------------------------------------
-
 
     // lhc clock from tmb baseboard
     BUFG lhcck(.I(tmb_clock0), .O(lhc_ck)); // only goes to mmcm now for 4-phase generation
@@ -303,12 +307,14 @@ parameter CMD_REWIND  = 16'hf0f0; // 16'
     IBUFGDS #(.DIFF_TERM("TRUE"),.IOSTANDARD("LVDS_25"))  qpll40(.I(lhc_ckp) , .IB(lhc_ckn) , .O(qpll_ck40));
     IBUFGDS #(.DIFF_TERM("FALSE"),.IOSTANDARD("LVDS_25"))  clock125(.I(ck125p) , .IB(ck125n) , .O(ck125));
 
-    // Differential 160 mhz
+    // Differential 160 mhz from QPLL
     IBUFDS_GTXE1  clock160(.I(ck160p) , .IB(ck160n) , .O(ck160), .ODIV2(), .CEB(zero));
 
+    // 125 MHz GbE Clock
     IBUFDS_GTXE1  clock_gbe(.I(ck_gbep) , .IB(ck_gben) , .O(ckgbe), .ODIV2(), .CEB(1'b0));
     BUFG gbe_refclock(.I(ckgbe), .O(gbe_refck));
 
+    // 5 MHz clock derived from 40Mhz LHC clock
     bufg_div8clk clk1p6(lhc_clk,!lhc_locked,slwclk,stopped,locked); // slwclk is now 5 MHz again (was 1.6 MHz with div25 and lhc_clk, then 5 MHz using ck125)
 
     // MMCM for 4-phase LHC clock
@@ -431,6 +437,7 @@ parameter CMD_REWIND  = 16'hf0f0; // 16'
     // reset if last command is rewind or write
     wire last_cmd_is_rewind = {cmd_code_r,cmd_code_rr}==CMD_REWIND;
     wire last_cmd_is_write  = {cmd_code_r,cmd_code_rr}==CMD_WRITE;
+
     wire ibx_reset = (gtx_reset || last_cmd_is_rewind || last_cmd_is_write);
 
     // Read Clock Domain
@@ -624,11 +631,9 @@ parameter CMD_REWIND  = 16'hf0f0; // 16'
     end
     endgenerate
 
-
 //----------------------------------------------------------------------------------------------------------------------
 // Clock Domain Crossing ffs
 //----------------------------------------------------------------------------------------------------------------------
-
 
     // slow clock startup counter
     //----------------------------------------------------------------------------------------------------------------------
@@ -669,7 +674,14 @@ parameter CMD_REWIND  = 16'hf0f0; // 16'
 //----------------------------------------------------------------------------------------------------------------------
 // Ethernet crc calculation
 //----------------------------------------------------------------------------------------------------------------------
-    mac_crc  mac_crc32(gbe_txdat, crc_en, crc_out, crc_rst, gbe_txclk2);
+
+        mac_crc  mac_crc32(
+            .crc_dat ( gbe_txdat),
+            .crc_en  ( crc_en),
+            .crc_out ( crc_out),
+            .rst     ( crc_rst),
+            .clk     ( gbe_txclk2)
+        );
 
 //----------------------------------------------------------------------------------------------------------------------
 // GbE Tranceiver
@@ -682,280 +694,284 @@ parameter CMD_REWIND  = 16'hf0f0; // 16'
     reg [7:0]  nbx_i=0, nbx=0;
     wire rxdat_is_cmd = (gbe_rxdat&16'hf0f0)==16'hf0f0 && (gbe_rxdat&16'h0f0f)!=16'h0f0f;
 
+//----------------------------------------------------------------------------------------------------------------------
+//
+//----------------------------------------------------------------------------------------------------------------------
 
-
-    // command decoding
-    //----------------------------------------------
     always @(posedge gbe_txclk2 or posedge gtx_reset) // everything using GbE USR clock w/GTX_Reset
     begin
-        if (gtx_reset) begin
-            pkt_lim     <= 16'd64;
-            sel_rdclk   <= 1'b0;
-            dump_enable <= 1'b0;
-            event_enable <= 1'b0;
-        end
-        else begin
+    if (gtx_reset) begin
+        pkt_lim     <= 16'd64;
+        sel_rdclk   <= 1'b0;
+        dump_enable <= 1'b0;
+        event_enable <= 1'b0;
+    end
+    else begin
 
-            // load counter2 to READ registers and send it out
-            //-------------------------------------------------------------
-            if      (cmd_code == CMD_READ)  pkt_lim <= 16'd2061; // 16'd61 special test size 100 bytes.  later will be 4 KB
-            else if (cmd_code == CMD_WRITE) pkt_lim <= 16'd2048; // just over 4 KB for good Rx/Tx BRAM loading overlap
-            else                            pkt_lim <= 16'd36;   // our usual 50-byte size is default; F3F3 is the special 4 KB count
+        // load counter2 to READ registers and send it out
+        //-------------------------------------------------------------
+        if      (cmd_code == CMD_READ)  pkt_lim <= 16'd2061; // 16'd61 special test size 100 bytes.  later will be 4 KB
+        else if (cmd_code == CMD_WRITE) pkt_lim <= 16'd2048; // just over 4 KB for good Rx/Tx BRAM loading overlap
+        else                            pkt_lim <= 16'd36;   // our usual 50-byte size is default; F3F3 is the special 4 KB count
 
-            byte_count <= 16'hffff&((pkt_lim*2) - 16'd22); // Need BYTES; subtract preamble bytes etc.
+        byte_count <= 16'hffff&((pkt_lim*2) - 16'd22); // Need BYTES; subtract preamble bytes etc.
 
-            // dump enable
-            // dumps entire bram contents
-            //---------------------------------------------
-            if      (dump_enable_next)        dump_enable <= 1'b1;         // was !dump_done_r ...before that was 1'b1;.  dump_done is driven by ck40
-            else if (cmd_code[15:12] == 4'hF) dump_enable <= 1'b0;         // stop dump on any non-FDFD command: F0F0, F3F3, F7F7, FEFE...
-            else if (dump_enable)             dump_enable <= !dump_done_r; // dump_done is driven by ck40   ... was 1'b1;
-            else                              dump_enable <= dump_enable;
+        // dump enable
+        // dumps entire bram contents
+        //---------------------------------------------
+        if      (dump_enable_next)        dump_enable <= 1'b1;         // was !dump_done_r ...before that was 1'b1;.  dump_done is driven by ck40
+        else if (cmd_code[15:12] == 4'hF) dump_enable <= 1'b0;         // stop dump on any non-FDFD command: F0F0, F3F3, F7F7, FEFE...
+        else if (dump_enable)             dump_enable <= !dump_done_r; // dump_done is driven by ck40   ... was 1'b1;
+        else                              dump_enable <= dump_enable;
 
-            // event enable
-            // sends a single bx's data from the bram
-            //---------------------------------------------
+        // event enable
+        // sends a single bx's data from the bram
+        //---------------------------------------------
 
-            if      (cmd_code == CMD_SEND) event_enable <= !event_done_r;  // event_done is driven by ck40
-            else if (cmd_code[15:12] == 4'hF) event_enable <= 1'b0;           // stop dump on any non-FEFE command: F0F0, F3F3, F7F7, FDFD...
-            else                              event_enable <= event_enable;
+        if      (cmd_code == CMD_SEND)    event_enable <= !event_done_r;  // event_done is driven by ck40
+        else if (cmd_code[15:12] == 4'hF) event_enable <= 1'b0;           // stop dump on any non-FEFE command: F0F0, F3F3, F7F7, FDFD...
+        else                              event_enable <= event_enable;
 
-            // control rdclk source
-            //---------------------------------------------
-            sel_rdclk <= (cmd_code==CMD_READ); // JGhere, maybe this will change the clock before the Read is finished, so delay it?
-        end
+        // control rdclk source
+        //---------------------------------------------
+        sel_rdclk <= (cmd_code==CMD_READ); // JGhere, maybe this will change the clock before the Read is finished, so delay it?
+    end
     end
 
+//----------------------------------------------------------------------------------------------------------------------
+//
+//----------------------------------------------------------------------------------------------------------------------
 
-    //
-    //----------------------------------------------
     always @(posedge gbe_txclk2 or posedge gtx_reset) // everything using GbE USR clock w/GTX_Reset
     begin
-        if (gtx_reset) begin
-            counter         <= 16'h0000;
-            comma_align     <= 0;
-            crc_rst         <= 1;
-            data_bram       <= 16'hd1d0;
-            data_bram_r     <= 16'he4e2;
-            dump_done_r     <= 0;
-            dump_loop       <= 0;
-            event_done_r    <= 0;
-            nbx             <= 0;
-            pkt_id          <= 8'h0000;
-            rx_resetdone_r2 <= 0;
-            rx_resetdone_r3 <= 0;
-            pkt_send        <= 0; // 1st data word @counter == 12 --> 11 extra words, so subtract 22 bytes.
+    if (gtx_reset) begin
+        pkt_counter         <= 16'h0000;
+        comma_align     <= 0;
+        crc_rst         <= 1;
+        data_bram       <= 16'hd1d0;
+        data_bram_r     <= 16'he4e2;
+        dump_done_r     <= 0;
+        dump_loop       <= 0;
+        event_done_r    <= 0;
+        nbx             <= 0;
+        pkt_id          <= 8'h0000;
+        rx_resetdone_r2 <= 0;
+        rx_resetdone_r3 <= 0;
+        pkt_send        <= 0; // 1st data word @counter == 12 --> 11 extra words, so subtract 22 bytes.
+    end
+
+    else begin // Not Reset case
+
+        // domain crossing ffs
+        event_done_r    <= event_done;
+        dump_done_r     <= dump_done;
+
+        rx_resetdone_r2 <= rx_resetdone_r;
+        rx_resetdone_r3 <= rx_resetdone_r2;
+
+        // maybe use time_r > 8'h10 ?
+        // driven high to signal the gtx to perform comma alignment
+        // enable once the tranceiver is reset
+        //-------------------------------------------------------------
+        comma_align <= (rx_resetdone_r3)    ? 1'b1 : comma_align;
+
+
+        // needs one cycle during state 3
+        // finished sending 2nd crc byte, now reset the mac_crc machine
+        //--------------------------------------------------------------
+        crc_rst <= (tx_crc_byte1) ? 1'b1 : 1'b0;
+
+        // latch mode to set FPGA for continuous loop of sending all patterns
+        //-------------------------------------------------------------
+        dump_loop <= (dump_done_r) ? 1'b0 : dump_loop_i;
+
+        // latch number of bx to send (8 bits)
+        //-----------------------------------------
+        nbx <= (event_done_r) ? 8'b0 : nbx_i;
+
+
+        // select what goes where for the readout BRAM bus
+        //----------------------------------------------------------------------------
+
+        data_bram_r  <= data_bram;
+
+        if (bk_adr>MXBRAMS)
+            data_bram <= 16'h0a0f; // limited range of bk_adr space
+        else if (cmd_code == CMD_READ) begin
+            case (tx_adr[1:0])
+                2'b00: data_bram <= data_oram[bk_adr][63:48]; // correct for latency of BRAM readout response
+                2'b01: data_bram <= data_oram[bk_adr][15:0];
+                2'b10: data_bram <= data_oram[bk_adr][31:16];
+                2'b11: data_bram <= data_oram[bk_adr][47:32];
+            endcase // case (tx_adr[1:0])
         end
-
-        else begin // Not Reset case
-
-            // domain crossing ffs
-            event_done_r    <= event_done;
-            dump_done_r     <= dump_done;
-
-            rx_resetdone_r2 <= rx_resetdone_r;
-            rx_resetdone_r3 <= rx_resetdone_r2;
-
-            // maybe use time_r > 8'h10 ?
-            // driven high to signal the gtx to perform comma alignment
-            // enable once the tranceiver is reset
-            //-------------------------------------------------------------
-            comma_align <= (rx_resetdone_r3)    ? 1'b1 : comma_align;
+        else
+            data_bram <= 16'hdfd8;
 
 
-            // needs one cycle during state 3
-            // finished sending 2nd crc byte, now reset the mac_crc machine
-            //--------------------------------------------------------------
-            crc_rst <= (tx_crc_byte1) ? 1'b1 : 1'b0;
+        pkt_counter <= (end_of_packet || rx_timeout)  ? 16'h0000 : (synchronized && pkt_send) ? pkt_counter + 1'b1 : pkt_counter;
 
-            // latch mode to set FPGA for continuous loop of sending all patterns
-            //-------------------------------------------------------------
-            dump_loop <= (dump_done_r) ? 1'b0 : dump_loop_i;
+        pkt_id      <=  end_of_packet && tx_crc_byte1 ? pkt_id + 1'b1 : pkt_id;
 
-            // latch number of bx to send (8 bits)
-            //-----------------------------------------
-            nbx <= (event_done_r) ? 8'b0 : nbx_i;
+        if      (end_of_packet || rx_timeout )  pkt_send <= 1'b0;
+        else if (synchronized && (|cmd_code))   pkt_send <= 1'b1;
+        else                                    pkt_send <= pkt_send;
+
+    end
+    end
+
+//----------------------------------------------------------------------------------------------------------------------
+// GbE Tx to PC
+//----------------------------------------------------------------------------------------------------------------------
+
+    always @(posedge gbe_txclk2 or posedge gtx_reset) // everything using GbE USR clock w/GTX_Reset
+    begin
+    if (gtx_reset) begin
+        counter_send    <= 0;
+        crc_en          <= 0;
+        data_state      <= 0;
+        gbe_kout        <= 2'h1;
+        gbe_txdat       <= 16'h50bc;  // <-- idle 28.5/16.2
+        kchar_r         <= 0;
+        l_gbe_rxdat     <= 0;
+        l_kchar         <= 0;
+        ll_gbe_rxdat    <= 0;
+        ll_kchar        <= 0;
+        mac_ack         <= 0;
+        mac_seek        <= 0;
+        mac_sync        <= 0;
+        sync_state      <= 0;
+        tx_adr          <= 0;
+    end
+
+    else begin // Not Reset case
 
 
-            // select what goes where for the readout BRAM bus
-            //----------------------------------------------------------------------------
+        if (pkt_counter!=0 && pkt_counter<=pkt_lim) begin  // put data on gbe_txdat after preamble, MACaddr's & Length
 
-            data_bram_r  <= data_bram;
+            counter_send <= 1;
 
-            if (bk_adr>MXBRAMS) data_bram <= 16'h0a0f; // limited range of bk_adr space
-            else if (cmd_code == CMD_READ) begin
-                case (tx_adr[1:0])
-                    2'b00: data_bram <= data_oram[bk_adr][63:48]; // correct for latency of BRAM readout response
-                    2'b01: data_bram <= data_oram[bk_adr][15:0];
-                    2'b10: data_bram <= data_oram[bk_adr][31:16];
-                    2'b11: data_bram <= data_oram[bk_adr][47:32];
-                endcase // case (tx_adr[1:0])
+            // word 1
+            if (pkt_counter==16'd1) begin
+                gbe_txdat <= 16'h55fb;
+                gbe_kout  <= 2'h1;
+                tx_adr    <= 11'h0;
+            end
+
+            // words 2, 3, 4
+            else if (pkt_counter<16'd5) begin
+                gbe_txdat <= {pkt_counter[2],15'h5555};
+                gbe_kout  <= 2'h0;
+            end
+
+            // words 5, 6 (crc)
+            else if (pkt_counter<16'd7) begin
+                crc_en    <= 1;
+                gbe_txdat <= 16'hffff; // MAC32 No Longer inverts gbe_txdat input w/counter == 5 or 6; just send ones.
+            end
+
+            // words 8, 9 10
+            else if (pkt_counter<16'd11) begin
+                gbe_txdat <= 16'h0000;
+            end
+
+            // word 11
+            else if (pkt_counter<16'd12) begin  // only one cycle for this step!  counter == 11
+                gbe_txdat <= {byte_count[7:0],byte_count[15:8]};
+                tx_adr    <= tx_adr + 1'b1; // shifting 2-deep tx_bram pipeline
+            end
+
+            // word 12
+            else if (pkt_counter<16'd13) begin  // only one cycle for this step!  counter == 12
+                gbe_txdat <= cmd_code;    //  <-- first word returns the cmd_code
+                tx_adr    <= tx_adr + 1'b1; // shifting 2-deep tx_bram pipeline
+            end
+
+            // data
+            // words 13--
+            else begin
+                // start incrementing tx ram address
+                tx_adr <= tx_adr+1'b1;
+
+                // not read, or rewind
+                if (cmd_code[2]) begin  // Function4 is active, or f7 or fc, ff.  send cmd_code first.
+                    if (pkt_counter < 16'd14) gbe_txdat <= {4'hd,bk_adr[11:0]};    //  <-- 2nd word returns the bk_adr
+                    else                  gbe_txdat <= {pkt_id[4:0],rx_adr[10:0]};  // send the sequential packet ID for each packet, plus 11 bit sub-address
+                end
+
+                // rewind read address pointer
+                else if (~|cmd_code[3:0]) begin // cmd_rewind
+                    gbe_txdat <= prev_cmd[pkt_counter[1:0]];  //  returns preveious few cmd_codes, repeats to end of packet
+                end
+
+                // block ram readout
+                else if (bk_adr <= MXBRAMS) begin  // this is data_bram range.  for f3f3, f8f8, fbfb...
+                    if (pkt_counter < 16'd14) gbe_txdat <= {4'hd,bk_adr[11:0]}; //  <-- 2nd word returns the bk_adr
+                    else                  gbe_txdat <= data_bram_r[15:0];   // added a pipe register for data_bram, allows better timing?
+                end
+
+                // frame synchronization
+                else begin
+                    gbe_txdat <= 16'h50bc;  // <-- idle 28.5/16.2
+                    gbe_kout <= 2'h1;
+                end
+
+            end // if (pkt_counter >= 16'd13)
+        end // if (pkt_counter > 0 && pkt_counter <= GBE_LIM)
+
+
+        // MAC Synchronization
+        //----------------------------------------------------------------------------
+        //jg note: the MAC_ACK etc still don't work (v11p5)...do we care?
+        else if (!synchronized) begin  // send Sync "pairs" for a while after Reset
+            if (time_r[6] && time_r[1]) begin
+                mac_seek <= (ll_kchar && !l_kchar && ll_gbe_rxdat == 16'h42bc);
+                if (mac_seek && l_kchar && l_gbe_rxdat == 16'hb5bc)
+                    mac_sync <= 1'b1;
+                if (mac_seek && mac_sync && !ll_kchar && ll_gbe_rxdat == 16'h4000)
+                    mac_ack <= 1'b1;
             end
             else
-                data_bram <= 16'hdfd8;
+                mac_seek <= 0;
 
-
-            counter  <= (end_of_packet || rx_timeout) ? 16'h0000 : (!sync_state[0] && pkt_send) ? counter + 1'b1 : counter;
-            pkt_id   <=  end_of_packet && tx_crc_byte1 ? pkt_id + 1'b1 : pkt_id;
-
-            if      (end_of_packet || rx_timeout )                                         pkt_send <= 1'b0;
-            else if (!pkt_send && !sync_state[0] && startup_done && (cmd_code > 16'h0000)) pkt_send <= 1'b1;
-            else                                                                           pkt_send <= pkt_send;
-
-        end
-    end
-
-    //------------------------------------------------------------------------------------------------------------------
-    // packet construction
-    //------------------------------------------------------------------------------------------------------------------
-    always @(posedge gbe_txclk2 or posedge gtx_reset) // everything using GbE USR clock w/GTX_Reset
-    begin
-        if (gtx_reset) begin
-            counter_send    <= 0;
-            crc_en          <= 0;
-            data_state      <= 2'h0;
-            gbe_kout        <= 2'h1;
-            gbe_txdat       <= 16'h50bc;  // <-- idle 28.5/16.2
-            ireg            <= 0;
-            kchar_r         <= 0;
-            l_gbe_rxdat     <= 0;
-            l_kchar         <= 0;
-            ll_gbe_rxdat    <= 0;
-            ll_kchar        <= 0;
-            mac_ack         <= 0;
-            mac_seek        <= 0;
-            mac_sync        <= 0;
-            sync_state      <= 2'h0;
-            tx_adr          <= 0;
+            case (sync_state)
+                2'b00:   gbe_txdat <= 16'h42bc;
+                2'b10:   gbe_txdat <= 16'hb5bc;
+                default: gbe_txdat <= {1'b0,mac_sync,14'h0000}; // <-- we want this to be the final sync state.
+            endcase
+            gbe_kout  <= ((~sync_state) & 2'b01);
+            sync_state <= sync_state + 1'b1;
         end
 
-        else begin // Not Reset case
+        else  begin // otherwise send Idles, allows time for Rx Checking
+            // at reset data_state = 0
+            // when counter_send goes high, data state is set to one, then it starts counting
 
 
-            // GbE Tx to PC
-            //--------------------------------------------------------
-            if ((counter > 0) && (counter <= pkt_lim)) begin  // put data on gbe_txdat after preamble, MACaddr's & Length
-                counter_send <= 1;
-                if (counter == 16'd1) begin
-                    gbe_txdat <= 16'h55fb;
-                    gbe_kout  <= 2'h1;
-                    tx_adr    <= 11'h0; /* tx_adr == BRAM readout bus */
-                end
-                else if (counter < 16'd5) begin
-                    gbe_txdat <= {counter[2],15'h5555};
-                    gbe_kout  <= 2'h0;
-                end
-                else if (counter < 16'd7) begin
-                    crc_en    <= 1;
-                    gbe_txdat <= 16'hffff; // MAC32 No Longer inverts gbe_txdat input w/counter == 5 or 6; just send ones.
-                    /*  JRG,  for historical reference...
-                        en_levelshift <= (cmd_code != 16'hf2f2);
-                        en_csr <= (cmd_code != 16'hf5f5);
-                        */
-                end
-                else if (counter < 16'd11) begin
-                    gbe_txdat <= 16'h0000;
-                end
-                else if (counter < 16'd12) begin  // only one cycle for this step!  counter == 11
-                    gbe_txdat <= {byte_count[7:0],byte_count[15:8]};
-                    tx_adr    <= tx_adr + 1'b1; // shifting 2-deep tx_bram pipeline
-                    ireg      <= 0;
-                end
-                else if (counter < 16'd13) begin  // only one cycle for this step!  counter == 12
-                    gbe_txdat <= cmd_code;    //  <-- first word returns the cmd_code
-                    tx_adr    <= tx_adr + 1'b1; // shifting 2-deep tx_bram pipeline
-                end
+            if      (counter_send)  data_state <= 2'h1;
+            else if (data_state==0) data_state <= data_state;
+            else                    data_state <= data_state + 1'b1;
 
-                // JGhere: this is the gbe command decode.  A lot of it is not needed by the CSC_GEM test stand!
-                else begin // if (counter >= 16'd13).  first data word @counter == 13 --> 12 counts ahead!
-                    tx_adr <= tx_adr + 1'b1;
-                    ireg   <= ireg + cmd_code[1] + (~counter[0]&cmd_code[0]); // 32b if CMD Odd, 16b if CMD Even
-                    //  F5 => 0 + (cnt[0]&1), alternates ireg increments for 32-bit register readout.
-                    //  F6 => 1 + (cnt[0]&0), continuous increments for 16-bit register readout.
-
-
-
-
-
-                    // JGhere: next 3 lines are dummies, can be deleted...  not needed by the CSC_GEM test stand!
-                    //if(cmd_code[1]^cmd_code[0]) begin  // generalized for f1f1 or f2f2 ( == !f3f3 && !f4f4) or f5 or f6...f9, fa, fd, fe
-                    //    gbe_txdat <= 16'ha1a1;
-                    //end
-
-                    // cmd_code[2]
-                    // any command except read
-                    if (cmd_code[2]) begin  // Function4 is active, or f7 or fc, ff.  send cmd_code first.
-                        if (counter < 16'd14)
-                            gbe_txdat <= {4'hd,bk_adr[11:0]};    //  <-- 2nd word returns the bk_adr
-                        else
-                            gbe_txdat <= {pkt_id[4:0],rx_adr[10:0]};  // send the sequential packet ID for each packet, plus 11 bit sub-address
-                    end
-                    else if (~|cmd_code[3:0]) begin  // only command f0 can make this true
-                        gbe_txdat <= prev_cmd[counter[1:0]];    //  returns preveious few cmd_codes, repeats to end of packet
-                    end
-
-
-
-
-                    else if (bk_adr <= MXBRAMS) begin  // this is data_bram range.  for f3f3, f8f8, fbfb...
-                        if (counter < 16'd14)
-                            gbe_txdat <= {4'hd,bk_adr[11:0]};    //  <-- 2nd word returns the bk_adr
-                        else
-                            gbe_txdat <= data_bram_r[15:0];  // added a pipe register for data_bram, allows better timing?
-                    end
-                    else begin
-                        gbe_txdat <= 16'h50bc;  // <-- idle 28.5/16.2
-                        gbe_kout <= 2'h1;
-                    end
-                end // if (counter >= 16'd13)
-            end // if (counter > 0 && counter <= GBE_LIM)
-
-
-            //jg note: the MAC_ACK etc still don't work (v11p5)...do we care?
-            else if (!startup_done || sync_state[0]) begin  // send Sync "pairs" for a while after Reset
-                if (time_r[6] && time_r[1]) begin
-                    mac_seek <= (ll_kchar && !l_kchar && ll_gbe_rxdat == 16'h42bc);
-                    if (mac_seek && l_kchar && l_gbe_rxdat == 16'hb5bc)
-                        mac_sync <= 1'b1;
-                    if (mac_seek && mac_sync && !ll_kchar && ll_gbe_rxdat == 16'h4000)
-                        mac_ack <= 1'b1;
-                end
-                else mac_seek <= 0;
-
-                case (sync_state)
-                    2'b00:   gbe_txdat <= 16'h42bc;
-                    2'b10:   gbe_txdat <= 16'hb5bc;
-                    default: gbe_txdat <= {1'b0,mac_sync,14'h0000}; // <-- we want this to be the final sync state.
-                endcase
-                gbe_kout  <= ((~sync_state) & 2'b01);
-                sync_state <= sync_state + 1'b1;
-            end
-            else  begin // otherwise send Idles, allows time for Rx Checking
-                // at reset data_state = 0
-                // when counter_send goes high, data state is set to one, then it starts counting
-
-
-                if      (counter_send)  data_state <= 2'h1;
-                else if (data_state==0) data_state <= data_state;
-                else                    data_state <= data_state + 1'b1;
-
-                counter_send <= 0;
-                crc_en       <= 0;
-                gbe_txdat    <= 16'h50bc;  // <-- idle 28.5/16.2
-                gbe_kout     <= 2'h1;
-                tx_adr       <= 0;
-            end
-
-            ll_kchar     <= l_kchar;
-            l_kchar      <= rxer[0]|rxer[1];
-            kchar_r      <= rxer[1:0];
-            ll_gbe_rxdat <= l_gbe_rxdat;
-            l_gbe_rxdat  <= gbe_rxdat;
+            counter_send <= 0;
+            crc_en       <= 0;
+            gbe_txdat    <= 16'h50bc;  // <-- idle 28.5/16.2
+            gbe_kout     <= 2'h1;
+            tx_adr       <= 0;
         end
-    end
 
-    // GbE Rx from PC
-    //--------------------------------------------------------
+        ll_kchar     <=  l_kchar;
+        l_kchar      <= |rxer[1:0];
+        kchar_r      <=  rxer[1:0];
+        ll_gbe_rxdat <=  l_gbe_rxdat;
+        l_gbe_rxdat  <=  gbe_rxdat;
+
+    end // not reset case
+    end // posedge clock
+
+//----------------------------------------------------------------------------------------------------------------------
+// GbE Rx from PC
+//----------------------------------------------------------------------------------------------------------------------
+
     always @(posedge gbe_txclk2 or posedge gtx_reset) // everything using GbE USR clock w/GTX_Reset
     begin
         if (gtx_reset) begin
@@ -979,26 +995,37 @@ parameter CMD_REWIND  = 16'hf0f0; // 16'
             data_iram[47:32]<= 16'h0000;
             data_iram[63:48]<= 16'h0000;
         end
-        else
-        begin
-
+        else begin
             bk_adr   <= (end_of_packet || rx_timeout) ? 12'h000  : bk_adr;
             cmd_code <=  end_of_packet && |cmd_code ? 16'h0000 : cmd_code;
 
-            if (time_r[7] && rxdv) begin // get command from first 1-2 data bytes of packet
-                if (gbe_rxcount == 16'd4407) begin  // tuned to handle weird .5 sec rxdv case after Reset.
-                    ovfl_packet <= ovfl_packet + 1'b1; // tracks when a rx packet times-out, over jumbo GbE limit
-                    rx_timeout <= 1'b1;  // only set for pretty big jumbo packet, over 8810 bytes
-                end
-                else gbe_rxcount <= gbe_rxcount + 1'b1;
+            if (startup_done && rxdv) begin // get command from first 1-2 data bytes of packet
 
-                if (cmd_code != CMD_WRITE) rx_adr_r[10:0] <= 11'h000;
-                else if (cycle4) rx_adr_r <= rx_adr;
+
+                // GbE Rx Counter
+                // -----------------------------------------------------
+                if (gbe_rxcount == 16'd4407) begin     // tuned to handle weird .5 sec rxdv case after Reset.
+                    ovfl_packet <= ovfl_packet + 1'b1; // tracks when a rx packet times-out, over jumbo GbE limit
+                    rx_timeout  <= 1'b1;               // only set for pretty big jumbo packet, over 8810 bytes
+                    gbe_rxcount <= gbe_rxcount;
+                end
+                else
+                    gbe_rxcount <= gbe_rxcount + 1'b1;
+
+
+                // rx_adr to block ram zeroed if we are not updating. Does this even matter ?
+                if (cmd_code != CMD_WRITE)
+                    rx_adr_r[10:0] <= 11'h000;
+                else if (cycle4)
+                    rx_adr_r <= rx_adr;
+
 
                 // timeout reset
+                //-----------------------------------------------------
                 rx_adr <= (rx_timeout) ? 11'h0 : rx_adr;
 
-                // JGhere, Break down GbE packet Rx from the PC:
+                // Break down GbE packet Rx from the PC:
+                //-----------------------------------------------------
                 if ( rx_timeout | event_done_r | dump_done_r )
                 begin
                     cmd_code      <= 16'h0000;
@@ -1008,8 +1035,9 @@ parameter CMD_REWIND  = 16'hf0f0; // 16'
                     loading_bram  <= 0;
                 end
 
-                // latch command
-                else if ((gbe_rxcount==16'h0003) && (cmd_code==16'h0000) && rxdat_is_cmd)
+                // latch command (word 3)
+                //-------------------------
+                else if ((gbe_rxcount==16'd3) && rxdat_is_cmd)
                 begin
                         cmd_code     <= gbe_rxdat; //   ^^^ make sure cmd code looks valid ^^^
                         prev_cmd[0]  <= gbe_rxdat;
@@ -1021,9 +1049,9 @@ parameter CMD_REWIND  = 16'hf0f0; // 16'
                         loading_bram <= 0;
                 end
 
-                // parse_address
+                // parse command and latch address (word 4)
                 //-----------------------------------------------
-                else if (|cmd_code && (gbe_rxcount==16'h0004))
+                else if ((gbe_rxcount==16'd4) && |cmd_code)
                 begin
                     dump_loop_i <= (cmd_code==CMD_DUMP) ? (gbe_rxdat[3:0]==4'hC) : 1'b0;
                     nbx_i       <= (cmd_code==CMD_SEND) ? (gbe_rxdat[7:0])       : 8'b0;
@@ -1033,22 +1061,22 @@ parameter CMD_REWIND  = 16'hf0f0; // 16'
 
                 // parse_data
                 //------------------------------------------------------------------------------------------
-                else if (gbe_rxcount > 16'h0004 && (cmd_code == CMD_WRITE) && (bk_adr <= MXBRAMS) )
+                else if (gbe_rxcount > 16'd4 && cmd_code==CMD_WRITE && bk_adr<=MXBRAMS)
                 begin
-                    cycle4   <= (loading_bram & (rx_adr[1:0] == 2'h3)); // cannot begin before rx_count=6
+                    // loading block ram flag
+                    loading_bram <= (rx_adr==MX_RX_ADR) ? 1'b0 : (gbe_rxcount==16'h0005) ? 1'b1 : loading_bram;
 
-                    // at the first byte of the data, check if the command is command write.
-                    loading_bram <= (gbe_rxcount == 16'h0005) ? 1'b1 : loading_bram;
-                    loading_bram <= (rx_adr==11'h7ff)         ? 1'b0 : loading_bram;
+                    // synchronization
+                    cycle4       <= loading_bram && (rx_adr[1:0]==2'h3); // cannot begin before rx_count=6
 
-                    // loop over block ram addresses
-                    rx_adr   <= (rx_adr==11'h7ff) ? rx_adr : rx_adr + 1'b1;
+                    // increment rx_addr until we reach the maximum counter
+                    rx_adr   <= (rx_adr==11'h7ff) ? rx_adr : rx_adr + 1'b1; // 7ff==2047; 2047/4 cyclces = 511.... 512 entires in bram. voila
 
                     case (rx_adr[1:0])
-                        2'h0:    data_iram[15:0]  <= gbe_rxdat[15:0];
-                        2'h1:    data_iram[31:16] <= gbe_rxdat[15:0];
-                        2'h2:    data_iram[47:32] <= gbe_rxdat[15:0];
-                        default: data_iram[63:48] <= gbe_rxdat[15:0];
+                        2'h0: data_iram[15:0]  <= gbe_rxdat[15:0];
+                        2'h1: data_iram[31:16] <= gbe_rxdat[15:0];
+                        2'h2: data_iram[47:32] <= gbe_rxdat[15:0];
+                        2'h3: data_iram[63:48] <= gbe_rxdat[15:0];
                     endcase
                 end
 
@@ -1058,35 +1086,34 @@ parameter CMD_REWIND  = 16'hf0f0; // 16'
                     cycle4 <= 0;
                 end // else: !if(gbe_rxcount == 3 or 4, or cmd=f7f7)
 
-            end  // if (time_r[7] & rxdv & correct switch state)
+            end  // if (startup_done & rxdv & correct switch state)
 
-            else  begin  // if (rxdv == 0) or time_r[7]==0
+            else  begin  // if (rxdv == 0) or !startup_done
                 gbe_rxcount  <= 16'h0000;
                 rx_timeout   <= 1'b0;
                 cycle4       <= 0;
                 loading_bram <= 0;
             end
         end // else: !if(gtx_reset)
-
     end // @(posedge gbe_txclk2 or posedge gtx_reset)
 
 //----------------------------------------------------------------------------------------------------------------------
-// transmit data state
+// transmit data multiplexer
 //----------------------------------------------------------------------------------------------------------------------
 
     always @(*) begin
         case (data_state)
-            2'h0: tx_out[15:0] = gbe_txdat[15:0];
-            2'h1: tx_out[15:0] = crc_out[15:0];  // send out CRC "MSB-first"; it's already inverted and backwards
-            2'h2: tx_out[15:0] = crc_out[31:16];
-            2'h3: tx_out[15:0] = CMD_EOF;
+            2'h0: tx_out = gbe_txdat[15:0];
+            2'h1: tx_out = crc_out[15:0];  // send out CRC "MSB-first"; it's already inverted and backwards
+            2'h2: tx_out = crc_out[31:16];
+            2'h3: tx_out = EOF;
         endcase
 
         case (data_state)
-            2'h1:    tx_kout = 2'h0;
-            2'h2:    tx_kout = 2'h0;
-            2'h3:    tx_kout = 2'h3;
-            default: tx_kout = gbe_kout;
+            2'h0: tx_kout = gbe_kout;
+            2'h1: tx_kout = 2'h0;
+            2'h2: tx_kout = 2'h0;
+            2'h3: tx_kout = 2'h3;
         endcase
     end  // always @ (*)
 
@@ -1098,7 +1125,7 @@ parameter CMD_REWIND  = 16'hf0f0; // 16'
     wire [1:0]  rx_disp;  // other signals for GTX
     wire [3:0]  ignore;  // outputs from GTX we don't care about
     wire [1:0]  rx_lostsync;
-    //wire  gbe_tx_outclk; // out from Tx PLL
+    wire  gbe_tx_outclk; // out from Tx PLL
 
     GBE_T20R20 gbe_gtx (
         gbe_refck,         // GTX0_DOUBLE_RESET_CLK_IN,
@@ -1174,120 +1201,10 @@ parameter CMD_REWIND  = 16'hf0f0; // 16'
                     |(|rx_lostsync);
 
 
-
-//----------------------------------------------------------------------------------------------------------------------
-// GEM Data Emulation
-//----------------------------------------------------------------------------------------------------------------------
-
-  //   reg [191:0] partition0 = 0;
-  //   reg [191:0] partition1 = 0;
-  //   reg [191:0] partition2 = 0;
-  //   reg [191:0] partition3 = 0;
-  //   reg [191:0] partition4 = 0;
-  //   reg [191:0] partition5 = 0;
-  //   reg [191:0] partition6 = 0;
-  //   reg [191:0] partition7 = 0;
-
-  //   //genvar ibit;
-  //   //
-  //   //reg [3:0] rowcnter;
-  //   //reg [7:0] keycnter;
-
-  //   reg [3:0] gem_hit_emu=4'b0;
-  //   parameter gem_hit_s0 = 4'b0;
-  //   parameter gem_hit_s1 = 4'b1;
-  //   parameter gem_hit_s2 = 4'b1;
-  //   parameter gem_hit_s3 = 4'b1;
-
-  //   always @(posedge lhc_ck) begin
-  //   case (gem_hit_emu)
-  //       gem_hit_s0:  begin
-  //           partition0 <= 192'h000111222333444555666777888999AAABBBCCCDDDEEEFFF;
-  //           partition1 <= 192'h111222333444555666777888999AAABBBCCCDDDEEEFFF000;
-  //           partition2 <= 192'h222333444555666777888999AAABBBCCCDDDEEEFFF000111;
-  //           partition3 <= 192'h333444555666777888999AAABBBCCCDDDEEEFFF000111222;
-  //           partition4 <= 192'h444555666777888999AAABBBCCCDDDEEEFFF000111222333;
-  //           partition5 <= 192'h555666777888999AAABBBCCCDDDEEEFFF000111222333444;
-  //           partition6 <= 192'h666777888999AAABBBCCCDDDEEEFFF000111222333444555;
-  //           partition7 <= 192'h777888999AAABBBCCCDDDEEEFFF000111222333444555666;
-  //           gem_hit_emu <= gem_hit_s1;
-  //       end
-  //       gem_hit_s1: begin
-  //           partition0 <= 192'hFFFEEEDDDCCCBBBAAA999888777666555444333222111000;
-  //           partition1 <= 192'hEEEDDDCCCBBBAAA999888777666555444333222111000FFF;
-  //           partition2 <= 192'hDDDCCCBBBAAA999888777666555444333222111000FFFEEE;
-  //           partition3 <= 192'hCCCBBBAAA999888777666555444333222111000FFFEEEDDD;
-  //           partition4 <= 192'hBBBAAA999888777666555444333222111000FFFEEEDDDCCC;
-  //           partition5 <= 192'hAAA999888777666555444333222111000FFFEEEDDDCCCBBB;
-  //           partition6 <= 192'h999888777666555444333222111000FFFEEEDDDCCCBBBAAA;
-  //           partition7 <= 192'h888777666555444333222111000FFFEEEDDDCCCBBBAAA999;
-  //           gem_hit_emu <= gem_hit_s2;
-  //       end
-  //       gem_hit_s2: begin
-  //           partition0 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
-  //           partition1 <= 192'h555555555555555555555555555555555555555555555555;
-  //           partition2 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
-  //           partition3 <= 192'h555555555555555555555555555555555555555555555555;
-  //           partition4 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
-  //           partition5 <= 192'h555555555555555555555555555555555555555555555555;
-  //           partition6 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
-  //           partition7 <= 192'h555555555555555555555555555555555555555555555555;
-  //           gem_hit_emu <= gem_hit_s3;
-  //       end
-  //       gem_hit_s3: begin
-  //           partition0 <= 192'h555555555555555555555555555555555555555555555555;
-  //           partition1 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
-  //           partition2 <= 192'h555555555555555555555555555555555555555555555555;
-  //           partition3 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
-  //           partition4 <= 192'h555555555555555555555555555555555555555555555555;
-  //           partition5 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
-  //           partition6 <= 192'h555555555555555555555555555555555555555555555555;
-  //           partition7 <= 192'hAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA;
-  //           gem_hit_emu <= gem_hit_s0;
-  //       end
-  //   endcase
-  //   end
-
-  //   wire [13:0] hit0;
-  //   wire [13:0] hit1;
-  //   wire [13:0] hit2;
-  //   wire bsy1;
-  //   wire bsy2;
-
-
-    //  csc_hit_packer u_csc_hit_packer (
-    //      .clock      (lhc_ck),
-    //      .reset      (1'b0),
-    //
-    //      .partition0 (partition0),
-    //      .partition1 (partition1),
-    //      .partition2 (partition2),
-    //      .partition3 (partition3),
-    //      .partition4 (partition4),
-    //      .partition5 (partition5),
-    //      .partition6 (partition6),
-    //      .partition7 (partition7),
-    //
-    //      .hit0       (hit0),
-    //      .hit1       (hit1),
-    //      .hit2       (hit2),
-    //
-    //      .bsy1 (bsy1),
-    //      .bsy2 (bsy2),
-    //
-    //      .cluster_sep     (4'b1),
-    //      .cluster_sep_adj (4'b0),
-    //      .mask_adj        (1'b1),
-    //
-    //      .data_out        (gem_datagen)
-    //  );
-
-    //wire gem_sump = (|hit0[13:0]) | (|hit1[13:0]) | (|hit2[13:0]) | (|bsy1) | (|bsy2);
-    wire gem_sump;
-
 //----------------------------------------------------------------------------------------------------------------------
 // qpll lock lost
 //----------------------------------------------------------------------------------------------------------------------
+
     reg qpll_lock_lost;
     always @(posedge lhc_clk or posedge reset) // everything that uses lhc_clk w/simple Reset
     begin
@@ -1304,10 +1221,16 @@ parameter CMD_REWIND  = 16'hf0f0; // 16'
 //----------------------------------------------------------------------------------------------------------------------
 
     SRL16E #(.INIT(16'h7FFF)) SRL16TXPLL(.Q(txpll_rst), .A0(1'b1), .A1(1'b1), .A2(1'b1), .A3(1'b1), .CE (1'b1), .CLK(qpll_ck40), .D(1'b0));
-    //     mmcm from 80 MHz:               In,    out80,  out160,   out40,   reset,       locked
-    //   bufg_x2div2 snap_mmcm (tx_clk_out, tx_clk, snap_clk2, ck40, !ck160_locked, lock40); // from Tx GTX PLL out clk
-    //     mmcm from 80 MHz:                 In,    out80,  out160,   out40,   reset,       locked,   out40-no-bufg
-    bufg_x2div2plus snap_mmcm (tx_clk_out, tx_clk, snap_clk2, ck40, !ck160_locked, lock40, ck40buf); // from Tx GTX PLL out clk
+
+    bufg_x2div2plus snap_mmcm (
+        .CLK_IN1              ( tx_clk_out    ) ,
+        .CLK_OUT1             ( tx_clk        ) ,
+        .CLK_OUT2             ( snap_clk2     ) ,
+        .CLK_OUT3             ( ck40          ) ,
+        .RESET                ( !ck160_locked ) ,
+        .LOCKED               ( lock40        ) ,
+        .CLK_OUT3BUF          ( ck40buf       ) // from Tx GTX PLL out clk
+    );
 
 //----------------------------------------------------------------------------------------------------------------------
 // GEM + CFEB Fiber Outputs
@@ -1589,31 +1512,41 @@ parameter CMD_REWIND  = 16'hf0f0; // 16'
 
     wire fiberout_sump = (|tx_begin[7:0]) | (|tx_fc[7:0]) |synced_snapt | t12_fault | r12_fok;
 
+
+
+
 //----------------------------------------------------------------------------------------------------------------------
 // LED Assignments
 //----------------------------------------------------------------------------------------------------------------------
 
-    wire sump = gbe_sump | gem_sump | fiberout_sump | clk_sump;
+x_flashsm #(22) led0 (.trigger(loading_bram),         .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_led));
+x_flashsm #(22) led1 (.trigger(!dump_done),           .hold(1'b0), .clock(gbe_txclk2), .out(dump_done_led_n));
+x_flashsm #(22) led2 (.trigger(cmd_code==CMD_WRITE),  .hold(1'b0), .clock(gbe_txclk2), .out(cmd_code_led));
+x_flashsm #(22) led3 (.trigger(gbe_rxdat==CMD_WRITE), .hold(1'b0), .clock(gbe_txclk2), .out(rxdat_led));
+x_flashsm #(22) led4 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_adr<=MXBRAMS && gbe_rxcount==16'h5), .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_led2));
+x_flashsm #(22) led5 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_adr<=MXBRAMS && rx_adr==11'h7ff), .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_done));
+
+    wire sump = gbe_sump | fiberout_sump | clk_sump;
 
     always @(*)
-    begin // JG, v1p16: swap LED 3<>4, notes and all
-        led_low[0] =  sump;
-        led_low[1] =  1'b0;
-        led_low[2] =  qpll_lock;              // always ON!   was !_ccb_rx[31] == _alct_adb_pulse_async
-        led_low[3] =  qpll_lock_lost;         // always OFF?  was _ccb_rx[35] == mpc_in1, always ON
-        led_low[4] =  lhc_clk;
-        led_low[5] =  ck160_locked;           // always ON!                                              // Tx GTX PLL Ref lock
-        led_low[6] =  1'b0;                    // --> ON!  comes from mmcm driven by tx_pll_ck160 in FPGA
-        led_low[7] =  lhc_clk;                // just reset, includes ccb_rx[1]==L1reset
+    begin                               // JG, v1p16: swap LED 3<>4, notes and all
+        led_low[0] =  1'b0; // sump;
+        led_low[1] =  1'b0;  // 1'b0;
+        led_low[2] =  1'b0;             // qpll_lock;                              // always ON!   was !_ccb_rx[31] == _alct_adb_pulse_async
+        led_low[3] =  1'b0;             // qpll_lock_lost;                         // always OFF?  was _ccb_rx[35] == mpc_in1, always ON
+        led_low[4] =  1'b0;             // lhc_clk;
+        led_low[5] =  1'b0;             // ck160_locked;                           // always ON!                                              // Tx GTX PLL Ref lock
+        led_low[6] =  1'b0;             // 1'b0;                                   // --> ON!  comes from mmcm driven by tx_pll_ck160 in FPGA
+        led_low[7] =  1'b0;             // lhc_clk;                                // just reset, includes ccb_rx[1]==L1reset
 
-        led_hi[8]  = !(hold_bit | gtx_reset); // M1: synced with PB & errors at crate Rx
-        led_hi[9]  =  qpll_lock_lost;         // 0
-        led_hi[10] = !cmd_code[7];            // !gtx_reset; // 0
-        led_hi[11] = !rd_ptr[8];              // ~6.25 usec  // gtx_ready;             // 1
-        led_hi[12] = !dump_enable_rr;         // 12.5 usec   //
-        led_hi[13] = !dump_enable_r;          // 12.5 usec   // (locked & lhc_locked); // 1
-        led_hi[14] = !dump_enable;            // 12.5 usec
-        led_hi[15] = !dump_done;              // 50ns
+        led_hi[8]  = ~ (1'b0 ^ loading_bram_led  ); //!(hold_bit | gtx_reset) ; // M1: synced with PB & errors at crate Rx
+        led_hi[9]  = ~ (1'b0 ^ dump_done_led_n   ); // qpll_lock_lost         ; // 0
+        led_hi[10] = ~ (1'b0 ^ cmd_code_led      ); //!cmd_code[7]            ; // !gtx_reset                              ; // 0
+        led_hi[11] = ~ (1'b0 ^ rxdat_led         ); //!rd_ptr[8]              ; // ~6.25 usec  // gtx_ready                ; // 1
+        led_hi[12] = ~ (1'b0 ^ loading_bram_led2 ); //!dump_enable_rr         ; // 12.5 usec   //
+        led_hi[13] = ~ (1'b0 ^ loading_bram_done ); //!dump_enable_r          ; // 12.5 usec   // (locked & lhc_locked)    ; // 1
+        led_hi[14] = ~ (1'b0 ^ 1'b0              ); //!dump_enable            ; // 12.5 usec
+        led_hi[15] = ~ (1'b0 ^ loading_bram_led  ); //!dump_done              ; // 50ns
 
         test_led[9]   = lhc_ck;
         test_led[10]  = 1'b0;
