@@ -1,40 +1,42 @@
 `timescale 1ns / 1ps
 //////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date:    16:17:11 07/08/2011 
-// Design Name: 
-// Module Name:    PRBS_tx 
-// Project Name: 
-// Target Devices: 
-// Tool versions: 
-// Description: 
+// Company:
+// Engineer:
 //
-// Dependencies: 
+// Create Date:    16:17:11 07/08/2011
+// Design Name:
+// Module Name:    PRBS_tx
+// Project Name:
+// Target Devices:
+// Tool versions:
+// Description:
 //
-// Revision: 
+// Dependencies:
+//
+// Revision:
 // Revision 0.01 - File Created
-// Additional Comments: 
+// Additional Comments:
 //
 //////////////////////////////////////////////////////////////////////////////////
 module PRBS_tx(
     input OUT_CLK_ENA,
     input GEN_CLK,
     input RST,
-	 input INJ_ERR,
+	  input INJ_ERR,
     output reg [47:0] PRBS,
-	 output reg STRT_LTNCY
-    );
+	  output reg STRT_LTNCY
+);
 
 parameter start_pattern = 48'hFFFFFF000000;
 
 wire [23:0] lfsr;
-reg [23:0] lfsr_a;
-reg [23:0] lfsr_b;
+reg  [23:0] lfsr_a;
+reg  [23:0] lfsr_b;
+
 reg rst1 = 1'b1;
 reg rst2 = 1'b1;
 reg rst_f = 1'b1;
+
 wire rst_lfsr;
 wire start_pat;
 
@@ -56,6 +58,7 @@ always @(posedge GEN_CLK) begin
 				PRBS <= {lfsr_a,lfsr_b};
 	end
 end
+
 always @(posedge GEN_CLK) begin
 	if(!OUT_CLK_ENA) begin
 		rst_f <= rst1;
@@ -69,8 +72,9 @@ end
 //
    lfsr_R24 #(.init_fill(24'h83B62E))
    tx_lfsr1(
-	   .CLK(GEN_CLK),
-		.RST(rst_lfsr),
-		.LFSR(lfsr));
+       .CLK(GEN_CLK),
+       .RST(rst_lfsr),
+       .LFSR(lfsr)
+   );
 
 endmodule

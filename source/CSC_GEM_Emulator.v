@@ -72,6 +72,7 @@
 //
 //
 //////////////////////////////////////////////////////////////////////////////////
+
 module CSC_GEM_Emulator (
 
 // Clocks
@@ -102,7 +103,6 @@ module CSC_GEM_Emulator (
     output reg [15:8]   led_hi,
     output reg [10:9]   test_led,
 
-
 // Snap-12 Tranceivers
     input 	          t12_fault,
     input             r12_fok,
@@ -117,109 +117,135 @@ module CSC_GEM_Emulator (
 // Command Parameters
 //----------------------------------------------------------------------------------------------------------------------
 
-    // writes to block ram
-    parameter CMD_WRITE   = 16'hf7f7; // 16'b1111011111110111
-    // reads from block ram
-    parameter CMD_READ    = 16'hf3f3; // 16'b1111001111110011
-    // dump block ram contents
-    parameter CMD_DUMP    = 16'hfdfd; // 16'b1111110111111101
+    parameter CMD_WRITE   = 16'hf7f7; // writes to block ram
+    parameter CMD_READ    = 16'hf3f3; // reads from block ram
+    parameter CMD_DUMP    = 16'hfdfd; // dump block ram contents
 
     // not used in sw
-    parameter CMD_SEND    = 16'hfefe; // 16'b1111111011111110
-    parameter CMD_REWIND  = 16'hf0f0; // 16'
+    parameter CMD_SEND    = 16'hfefe;
+    parameter CMD_REWIND  = 16'hf0f0;
 
-
-
-    parameter EOF     = 16'hf7fd; // 16'b1111011111111101
+    parameter EOF         = 16'hf7fd; // 16'b1111011111111101
 
 //----------------------------------------------------------------------------------------------------------------------
 // Register Declarations and Interconnects
 //----------------------------------------------------------------------------------------------------------------------
 
+    // Counters
+    //-------------------------
     reg [22:0]  free_count;
     reg 	      free_tc;
     reg 	      slow_tc;
     reg [7:0]   time_count;
-    reg [7:0]   time_r,time_r_i;
-    wire        zero = 1'b0;
-    wire        one = 1'b1;
-    wire [1:0]  zero2 = 0;
-    wire [12:0] low = 0;
-
+    reg [7:0]   time_r=8'h00;
+    reg [7:0]   time_r_i;
 
     wire        startup_done = time_r[7];
+
+    // fixed length zeros
+    //-------------------------
+    wire        zero   =   1'b0;
+    wire        one    =   1'b1;
+    wire [1:0]  zero2  =   2'b0;
+    wire [12:0] low    =  13'b0;
+
+
     // snap12 GTX signals
-    //------------------------------------------------------------------------------------------------------------------
-    assign gtl_loop = 1'b0; // JRG: always set LOW (SEU danger, make OPEN --PD)   **Now INPUT for Mezz 2012!**
+    //-------------------
+
+    assign      gtl_loop = 1'b0; // JRG: always set LOW (SEU danger, make OPEN --PD)   **Now INPUT for Mezz 2012!**
     wire        synced_snapt;
     wire        snap_clk2, ck160_locked;
     wire [7:0]  tx_begin, tx_fc;
-    reg  [7:0]  ferr_f;
+    reg  [7:0]  ferr_f=0;
     reg  [15:0] err_count;
     reg  [7:0]  time_r_snap;
     reg  [7:0]  time_snap;
     wire stopped, locked, lock40;
 
-    // snap12 GTX signals
-    //------------------------------------------------------------------------------------------------------------------
     parameter SEEDBASE = 64'h8731c6ef4a5b0d29;
     parameter SEEDSTEP = 16'hc01d;
 
+    wire        ext_rst, force_err, stat0; // stat[3:0] =  cfebemul_in[2,3,1,4] on Emul board!
 
-    wire        ext_rst, force_err, stat0;  // stat[3:0] =  cfebemul_in[2,3,1,4] on Emul board!
-    wire        ck125, ck160, lhc_ck, lhc_clk, qpll_ck40, slwclk;   // ext 125 usr, QPLL160, ccb_ck40, QPLL40, ccb_ck40/25=1.6MHz
+
+    // Clock Signals
+    //---------------
+
+    wire        ck125, ck160, lhc_ck, lhc_clk, qpll_ck40, slwclk; // ext 125 usr, QPLL160, ccb_ck40, QPLL40, ccb_ck40/25=1.6MHz
     wire        lhc_ck0, lhc_ck90, lhc_ck180, lhc_ck270, lhcckfbout, lhcckfbout_buf;
 
     wire        ck40, ck40buf, rdclk;
     reg 	      sel_rdclk;
 
     // Add-ons for Ben dCFEB testing:
-    //------------------------------------------------------------------------------------------------------------------
+    //-------------------------------
+
     wire          tx_clk_out, tx_clk;
     wire          rx_strt, rx_valid, rx_match, rx_fc;
     reg           fiber_reset;
 
-
     // Physical Button
-    //---------------------------------------------------------------------
-    reg 	       hold_bit;        // debounced !pb signal, held until button release
-    reg 	       debounced_bit;   // sets one pulse for 200 ns  (5 MHz clock)
+    //----------------
+
+    reg hold_bit       =  0; // debounced !pb signal, held until button release
+    reg debounced_bit  =  0; // sets one pulse for 200 ns  (5 MHz clock)
 
     // GbE and BRAM
-    //---------------------------------------------------------------------
-    wire  gbe_refck; // GTXE1 ref clk, used for MGTref and DoubleReset clock
-    wire  gbe_txclk2, gbe_txclk2_buf;   // drives logic for Tx, the "internal" choice for USR clock
+    //-------------
+
+    wire  gbe_refck;                  // GTXE1 ref clk, used for MGTref and DoubleReset clock
+    wire  gbe_txclk2, gbe_txclk2_buf; // drives logic for Tx, the "internal" choice for USR clock
     wire  txoutclk_mmcm_lk;
 
-    parameter MXBRAMS = 12'd7; // was bff for 256 Bram's: bff, or 8 -> b07.
-    parameter GBE_LIM = 16'h080b;  // WORDcount limit. allow extra bytes for MAC preamble, addr's...
-    parameter MX_RX_ADR = 11'h7ff;
+    parameter MXBRAMS    =  12'd32;   // was bff for 256 Bram's: bff, or 8 -> b07.
+    parameter GBE_LIM    =  16'h080b; // WORDcount limit. allow extra bytes for MAC preamble, addr's...
+    parameter MX_RX_ADR  =  11'h7ff;  // 7ff=2047
 
-    reg [15:0]  pkt_lim; // BytecountLimit/2. Plus extra 22 bytes for MAC preamble etc.
-    reg [15:0]  pkt_counter;  // ^^^ 1st data word @ counter == 12; need 11 extra word counts, 22 bytes.
+    reg [15:0]  pkt_lim;     // BytecountLimit/2. Plus extra 22 bytes for MAC preamble etc.
+    reg [15:0]  pkt_counter; // ^^^ 1st data word @ counter == 12; need 11 extra word counts, 22 bytes.
     reg [10:0]  tx_adr, rx_adr, rx_adr_r;
-    reg [15:0]  gbe_rxcount;
-    reg [7:0]   pkt_id;
+    wire [2:0]  iram_word = rx_adr[1:0];
+    wire [2:0]  oram_word = tx_adr[1:0];
+    reg [15:0]  gbe_rxcount=16'h0000;
+    reg [7:0]   pkt_id=8'h0000;
     reg [15:0]  prev_cmd[3:0];
     reg [11:0]  bk_adr;
-    reg         tx_resetdone_r, rx_resetdone_r, rx_resetdone_r2, rx_resetdone_r3, pkt_send;
+
+    reg         tx_resetdone_r   =  0;
+    reg         rx_resetdone_r   =  0;
+    reg         rx_resetdone_r2  =  0;
+    reg         rx_resetdone_r3  =  0;
+
+    reg         pkt_send;
     wire        tx_resetdone, rx_resetdone;
-    reg [7:0]   ovfl_packet;
-    reg 	      rx_timeout;
+    reg  [7:0]  ovfl_packet;
+    reg 	      rx_timeout    = 1'b0;
     wire        ckgbe;
     wire        rxpll_lk;
     wire [2:0]  rx_bufstat;
-    reg  [1:0]  gbe_kout, tx_kout, tx_kout_r;
-    reg 	      comma_align;
+    reg  [1:0]  gbe_kout      = 2'h1;
+    reg  [1:0]  tx_kout       = 0;
+    reg  [1:0]  tx_kout_r     = 1'b1;
+    reg 	      comma_align   = 0;
     wire [5:0]  rxer;
-    reg  [15:0] gbe_txdat, tx_out, tx_out_r;
+    reg  [15:0] gbe_txdat     = 16'h50bc;
+    reg  [15:0] tx_out;
+    reg  [15:0] tx_out_r      = 16'h50bc;
     wire [15:0] gbe_rxdat;
-    reg  [15:0] l_gbe_rxdat, ll_gbe_rxdat;
-    reg 	      l_kchar, ll_kchar, mac_seek, mac_sync, mac_ack, counter_send;
-    reg  [1:0]  kchar_r;
-    reg  [1:0]  sync_state, data_state;
+    reg  [15:0] l_gbe_rxdat;
+    reg  [15:0] ll_gbe_rxdat;
+    reg 	      l_kchar       = 0;
+    reg         ll_kchar;
+    reg         mac_seek      = 0;
+    reg         mac_sync      = 0;
+    reg         mac_ack       = 0;
+    reg         counter_send;
+    reg  [1:0]  kchar_r       = 2'b0;
+    reg  [1:0]  sync_state    = 2'h0;
+    reg  [1:0]  data_state    = 2'h0;
 
-    wire synchronized = startup_done && !sync_state[0];
+
 
     wire tx_data      = (data_state==2'h0);
     wire tx_crc_byte0 = (data_state==2'h1);
@@ -228,8 +254,10 @@ module CSC_GEM_Emulator (
     wire end_of_packet = data_state[1];
 
     reg  [15:0] data_bram, data_bram_r;  // these are the BRAM MUX bus & register
-    wire [63:0] data_oram[MXBRAMS:12'h000];
+
+    wire [63:0] data_oram [MXBRAMS-1:0];
     reg  [63:0] data_iram;
+
     reg cycle4;       // use this to toggle bram WRITE every 4th GbE word during cmd=f7f7
     reg loading_bram; // was called cmdf7f7
 
@@ -237,17 +265,9 @@ module CSC_GEM_Emulator (
     wire [31:0] crc_out;
     reg  [15:0] byte_count;
 
-    wire [MXBRAMS:12'h000] sbiterr_oram,  dbiterr_oram;
+    wire [MXBRAMS-1:12'h000] sbiterr_oram,  dbiterr_oram;
 
     assign f_sclk   = 1'b1;  // to Finisar GbE Transceiver
-
-    //
-    //-----------------------------------------------------------------------------------------------------------------
-
-    assign low    = 0;
-    assign zero   = 0;
-    assign zero2  = 2'b0;
-    assign one    = 1'b1;
 
     assign fcs      = 1'b1;  // drive high for Mezz 2012 compatibility, useful on the bench
     assign t12_rst  = 1'b1;  // low-true signal for Snap12 Transmitter
@@ -268,33 +288,12 @@ module CSC_GEM_Emulator (
 
     integer     i;
 
-    initial begin
-        ferr_f[7:0]   = 0;
-        debounced_bit = 0;
-        hold_bit      = 0;
+  // GbE Transceiver
 
-        // JG, some new items:
-        l_kchar         = 0;
-        kchar_r         = 0;
-        tx_resetdone_r  = 0;
-        rx_resetdone_r  = 0;
-        rx_resetdone_r2 = 0;
-        rx_resetdone_r3 = 0;
-        comma_align     = 0;
-        gbe_kout        = 2'h1;
-        gbe_txdat       = 16'h50bc;
-        tx_out_r        = 16'h50bc;
-        tx_kout_r       = 2'h1;
-        sync_state      = 2'h0;
-        data_state      = 2'h0;
-        mac_seek        = 0;
-        mac_sync        = 0;
-        mac_ack         = 0;
-        time_r          = 8'h00;
-        gbe_rxcount     = 16'h0000;
-        rx_timeout      = 1'b0;
-        pkt_id          = 8'h0000;
-    end // initial begin
+    reg   event_done_r = 0, dump_done_r = 0, dump_loop = 0;
+
+    reg [7:0]  nbx_i=0, nbx=0;
+
 
 //----------------------------------------------------------------------------------------------------------------------
 // Clock Generation
@@ -304,7 +303,7 @@ module CSC_GEM_Emulator (
     BUFG lhcck(.I(tmb_clock0), .O(lhc_ck)); // only goes to mmcm now for 4-phase generation
 
     // Differential LHC clock from QPLL
-    IBUFGDS #(.DIFF_TERM("TRUE"),.IOSTANDARD("LVDS_25"))  qpll40(.I(lhc_ckp) , .IB(lhc_ckn) , .O(qpll_ck40));
+    IBUFGDS #(.DIFF_TERM("TRUE"), .IOSTANDARD("LVDS_25"))  qpll40  (.I(lhc_ckp), .IB(lhc_ckn), .O(qpll_ck40));
     IBUFGDS #(.DIFF_TERM("FALSE"),.IOSTANDARD("LVDS_25"))  clock125(.I(ck125p) , .IB(ck125n) , .O(ck125));
 
     // Differential 160 mhz from QPLL
@@ -414,6 +413,10 @@ module CSC_GEM_Emulator (
     reg  [7:0]  cmd_code_r  = 0; // 40/62.5 MHz s0
     reg  [7:0]  cmd_code_rr = 0; // 40/62.5 MHz s1
 
+    wire dump_enable_next  =  (!dump_enable&debounced_bit) | (cmd_code==CMD_DUMP);
+    wire rxdat_is_cmd      =  (gbe_rxdat&16'hf0f0)==16'hf0f0 && (gbe_rxdat&16'h0f0f)!=16'h0f0f;
+    wire synchronized      =  startup_done && !sync_state[0];
+
     reg  [7:0]  ibx=0;
     reg  [7:0]  nbx_r=0;
 
@@ -432,7 +435,6 @@ module CSC_GEM_Emulator (
     reg event_done=0;
 
     wire send_event = dump_enable_rr || (event_enable_r & !event_done);  // use this OR (f3f3 && (bk_adr == v)) to Read Enable the BRAMs
-
 
     // reset if last command is rewind or write
     wire last_cmd_is_rewind = {cmd_code_r,cmd_code_rr}==CMD_REWIND;
@@ -473,16 +475,19 @@ module CSC_GEM_Emulator (
     end // close rdclk
 
 
-    reg [47:0] fiber_out[7:0];
+    wire [55:0] gem_data_mux = sw[8] ? 56'hfeedadeadabeef : 56'h00000000000000;
+
+    reg [55:0] gem_fiber_out [1:0];
+    reg [47:0] cfeb_fiber_out[7:0];
     always @(negedge ck40) begin  // 80 MHz derived from GTX_TxPLL
-        fiber_out[0][47:0] <= (send_event) ? data_oram[0][47:0] : 48'h000000000000;
-        fiber_out[1][47:0] <= (send_event) ? data_oram[1][47:0] : 48'h000000000000;
-        fiber_out[2][47:0] <= (send_event) ? data_oram[2][47:0] : 48'h000000000000;
-        fiber_out[3][47:0] <= (send_event) ? data_oram[3][47:0] : 48'h000000000000;
-        fiber_out[4][47:0] <= (send_event) ? data_oram[4][47:0] : 48'h000000000000;
-        fiber_out[5][47:0] <= (send_event) ? data_oram[5][47:0] : 48'h000000000000;
-        fiber_out[6][47:0] <= (send_event) ? data_oram[6][47:0] : 48'h000000000000;
-        fiber_out[7][47:0] <= (send_event) ? data_oram[7][47:0] : 48'h000000000000;
+         gem_fiber_out[0][55:0] <= (send_event) ? data_oram[0][55:0] : gem_data_mux;
+        cfeb_fiber_out[1][47:0] <= (send_event) ? data_oram[1][47:0] : 48'h000000000000;
+        cfeb_fiber_out[2][47:0] <= (send_event) ? data_oram[2][47:0] : 48'h000000000000;
+        cfeb_fiber_out[3][47:0] <= (send_event) ? data_oram[3][47:0] : 48'h000000000000;
+        cfeb_fiber_out[4][47:0] <= (send_event) ? data_oram[4][47:0] : 48'h000000000000;
+        cfeb_fiber_out[5][47:0] <= (send_event) ? data_oram[5][47:0] : 48'h000000000000;
+        cfeb_fiber_out[6][47:0] <= (send_event) ? data_oram[6][47:0] : 48'h000000000000;
+        cfeb_fiber_out[7][47:0] <= (send_event) ? data_oram[7][47:0] : 48'h000000000000;
     end // always
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -572,11 +577,11 @@ module CSC_GEM_Emulator (
 
     assign rd_addr = (sel_rdclk) ? tx_adr[10:2] : rd_ptr[8:0];
 
-    wire bram_rd_en[MXBRAMS:0];
+    wire bram_rd_en[MXBRAMS-1:0];
 
     genvar ibram;
     generate
-    for (ibram=12'h000; ibram<=MXBRAMS; ibram=ibram+1'b1) begin:bramgen
+    for (ibram=12'h000; ibram<MXBRAMS; ibram=ibram+1'b1) begin:bramgen
 
         assign bram_rd_en[ibram] = send_event || ((cmd_code==CMD_READ) & (bk_adr==ibram) & gtx_ready);
 
@@ -587,47 +592,61 @@ module CSC_GEM_Emulator (
             .EN_ECC_WRITE   ("TRUE"),
             .RAM_MODE       ("SDP"),     // "SDP" or "TDP"
 
-        //.WRITE_WIDTH_A  (0),  // 0, 1, 2, 4, 9, 18, 36
+          //.WRITE_WIDTH_A  (0),  // 0, 1, 2, 4, 9, 18, 36
             .READ_WIDTH_A   (72), // 0, 1, 2, 4, 9, 18, 36, or 72, 64??
 
             .WRITE_WIDTH_B  (72), // 0, 1, 2, 4, 9, 18, 36, or 72, 64??
-        //.READ_WIDTH_B   (0),  // 0, 1, 2, 4, 9, 18, or 36
+          //.READ_WIDTH_B   (0),  // 0, 1, 2, 4, 9, 18, or 36
 
             //  --WriteMode: value on output upon a write ( "WRITE_FIRST", "READ_FIRST", or "NO_CHANGE")--
             .WRITE_MODE_A   ("READ_FIRST"),
             .WRITE_MODE_B   ("READ_FIRST")
             )
-            block_ram_ecc (
-                .ADDRARDADDR    ({1'b1, rd_addr[8:0], 6'h3f}),      // 16 bit RDADDR, but only 14:6 are used w/ECC.  1/3f?
 
-                .DIADI          (data_iram[31:0]),                  // DI low 32-bit
-                .DIBDI          (data_iram[63:32]),                 // DI high 32-bit
+        block_ram_ecc (
+            // read and write address
+            .ADDRARDADDR    ({1'b1, rd_addr  [8:0], 6'h3f}),  // 16 bit RDADDR, but only 14:6 are used w/ECC.  1/3f?
+            .ADDRBWRADDR    ({1'b1, rx_adr_r[10:2], 6'h3f}),  // 16 bit WRADDR, but only 14:6 are used w/ECC.  1/3f?
 
-                .DOADO          (data_oram[ibram][31:0]),               // DO low 32-bit
-                .DOBDO          (data_oram[ibram][63:32]),              // DO high 32-bit
+            // read and write clock
+            .CLKARDCLK      (rdclk),                                // RDCLK
+            .CLKBWRCLK      (gbe_txclk2),                           // WRCLK    and ensure safe setup time for ADR when EN is Enabled!
 
-                .WEA            (4'h0),                             // WEA, NA for SDP
-                .ENARDEN        (bram_rd_en[ibram]),                // RDEN
-                .REGCEAREGCE    (1'b0),                             // REGCE, NA if DO_REG=0
-                .RSTRAMARSTRAM  (1'b0),
-                .RSTRAMB        (1'b0),                             // NA if SDP
-                .RSTREGARSTREG  (1'b0),                             // NA if SDP or DO_REG=0
-                .RSTREGB        (1'b0),                             // NA if SDP or DO_REG=0
-                .CLKARDCLK      (rdclk),                            // RDCLK
-                .ADDRBWRADDR    ({1'b1, rx_adr_r[10:2], 6'h3f}),    // 16 bit WRADDR, but only 14:6 are used w/ECC.  1/3f?
-                .WEBWE          (8'hFF),                            // WE?  WEBWE ( 8 bits)
-                .ENBWREN        (cycle4 & (bk_adr==ibram) & gtx_ready), // WREN  Alfke: "WE off" is not sufficient to protect
-                .REGCEB         (1'b0),                             // REGCEB        Init data, So require stable clocks before EN is set,
-                .CLKBWRCLK      (gbe_txclk2),                       // WRCLK    and ensure safe setup time for ADR when EN is Enabled!
-                .INJECTSBITERR  (1'b0),
-                .SBITERR        (sbiterr_oram[ibram]),
-                .INJECTDBITERR  (1'b0),
-                .DBITERR        (dbiterr_oram[ibram])
+            // data in
+            .DIADI          (data_iram[31:0]),  // DI low 32-bit
+            .DIBDI          (data_iram[63:32]), // DI high 32-bit
 
-                // not valid if DO_REG=0:  REGCEAREGCE, REGCEB, RSTREGARSTREG, RSTREGB
-                // not used for SDP:  CASCADE*, REGCEB, RSTRAMB, RSTREGARSTREG, RSTREGB, WEA
-                //.RST  (reset) // err.mon: SBITERR DBITERR
-            );
+            // data out
+            .DOADO          (data_oram[ibram][31:0]),               // DO low 32-bit
+            .DOBDO          (data_oram[ibram][63:32]),              // DO high 32-bit
+
+            // in port read enable
+            .ENARDEN        (bram_rd_en[ibram]),                    // RDEN
+            .ENBWREN        (cycle4 & (bk_adr==ibram) & gtx_ready), // WREN  Alfke: "WE off" is not sufficient to protect
+
+            // bit errors
+            .SBITERR        (sbiterr_oram[ibram]),
+            .DBITERR        (dbiterr_oram[ibram]),
+
+            // misc
+
+            .WEA            (4'h0),                                 // WEA, NA for SDP
+
+            .REGCEAREGCE    (1'b0),                                 // REGCE, NA if DO_REG=0
+            .RSTRAMARSTRAM  (1'b0),
+
+            .RSTRAMB        (1'b0),                                 // NA if SDP
+            .RSTREGARSTREG  (1'b0),                                 // NA if SDP or DO_REG=0
+            .RSTREGB        (1'b0),                                 // NA if SDP or DO_REG=0
+            .WEBWE          (8'hFF),                                // WE?  WEBWE ( 8 bits)
+            .REGCEB         (1'b0),                                 // REGCEB        Init data, So require stable clocks before EN is set,
+            .INJECTSBITERR  (1'b0),
+            .INJECTDBITERR  (1'b0)
+
+            // not valid if DO_REG=0:  REGCEAREGCE, REGCEB, RSTREGARSTREG, RSTREGB
+            // not used for SDP:  CASCADE*, REGCEB, RSTRAMB, RSTREGARSTREG, RSTREGB, WEA
+            //.RST  (reset) // err.mon: SBITERR DBITERR
+        );
     end
     endgenerate
 
@@ -672,7 +691,7 @@ module CSC_GEM_Emulator (
     end
 
 //----------------------------------------------------------------------------------------------------------------------
-// Ethernet crc calculation
+// Ethernet CRC calculation
 //----------------------------------------------------------------------------------------------------------------------
 
         mac_crc  mac_crc32(
@@ -684,18 +703,7 @@ module CSC_GEM_Emulator (
         );
 
 //----------------------------------------------------------------------------------------------------------------------
-// GbE Tranceiver
-//----------------------------------------------------------------------------------------------------------------------
-
-    wire dump_enable_next = (!dump_enable&debounced_bit) | (cmd_code==CMD_DUMP);
-
-    reg   event_done_r = 0, dump_done_r = 0, dump_loop = 0;
-
-    reg [7:0]  nbx_i=0, nbx=0;
-    wire rxdat_is_cmd = (gbe_rxdat&16'hf0f0)==16'hf0f0 && (gbe_rxdat&16'h0f0f)!=16'h0f0f;
-
-//----------------------------------------------------------------------------------------------------------------------
-//
+// Fiber out Dump Control
 //----------------------------------------------------------------------------------------------------------------------
 
     always @(posedge gbe_txclk2 or posedge gtx_reset) // everything using GbE USR clock w/GTX_Reset
@@ -739,13 +747,13 @@ module CSC_GEM_Emulator (
     end
 
 //----------------------------------------------------------------------------------------------------------------------
-//
+// Block RAM Data Readout
 //----------------------------------------------------------------------------------------------------------------------
 
     always @(posedge gbe_txclk2 or posedge gtx_reset) // everything using GbE USR clock w/GTX_Reset
     begin
     if (gtx_reset) begin
-        pkt_counter         <= 16'h0000;
+        pkt_counter     <= 16'h0000;
         comma_align     <= 0;
         crc_rst         <= 1;
         data_bram       <= 16'hd1d0;
@@ -790,23 +798,26 @@ module CSC_GEM_Emulator (
         nbx <= (event_done_r) ? 8'b0 : nbx_i;
 
 
-        // select what goes where for the readout BRAM bus
+        // block ram data readout multiplexer
         //----------------------------------------------------------------------------
+
+
 
         data_bram_r  <= data_bram;
 
-        if (bk_adr>MXBRAMS)
+        if (bk_adr>(MXBRAMS-1))
             data_bram <= 16'h0a0f; // limited range of bk_adr space
         else if (cmd_code == CMD_READ) begin
-            case (tx_adr[1:0])
-                2'b00: data_bram <= data_oram[bk_adr][63:48]; // correct for latency of BRAM readout response
-                2'b01: data_bram <= data_oram[bk_adr][15:0];
+            case (oram_word)
+                2'b01: data_bram <= data_oram[bk_adr][15: 0];
                 2'b10: data_bram <= data_oram[bk_adr][31:16];
                 2'b11: data_bram <= data_oram[bk_adr][47:32];
-            endcase // case (tx_adr[1:0])
+                2'b00: data_bram <= data_oram[bk_adr][63:48]; // correct for latency of BRAM readout response
+            endcase
         end
-        else
+        else begin
             data_bram <= 16'hdfd8;
+        end
 
 
         pkt_counter <= (end_of_packet || rx_timeout)  ? 16'h0000 : (synchronized && pkt_send) ? pkt_counter + 1'b1 : pkt_counter;
@@ -888,15 +899,15 @@ module CSC_GEM_Emulator (
             end
 
             // data
-            // words 13--
+            // words 13--xxx
             else begin
                 // start incrementing tx ram address
                 tx_adr <= tx_adr+1'b1;
 
                 // not read, or rewind
                 if (cmd_code[2]) begin  // Function4 is active, or f7 or fc, ff.  send cmd_code first.
-                    if (pkt_counter < 16'd14) gbe_txdat <= {4'hd,bk_adr[11:0]};    //  <-- 2nd word returns the bk_adr
-                    else                  gbe_txdat <= {pkt_id[4:0],rx_adr[10:0]};  // send the sequential packet ID for each packet, plus 11 bit sub-address
+                    if (pkt_counter < 16'd14) gbe_txdat <= {4'hd,bk_adr[11:0]};         //  <-- 2nd word returns the bk_adr
+                    else                      gbe_txdat <= {pkt_id[4:0],rx_adr[10:0]};  // send the sequential packet ID for each packet, plus 11 bit sub-address
                 end
 
                 // rewind read address pointer
@@ -905,15 +916,15 @@ module CSC_GEM_Emulator (
                 end
 
                 // block ram readout
-                else if (bk_adr <= MXBRAMS) begin  // this is data_bram range.  for f3f3, f8f8, fbfb...
-                    if (pkt_counter < 16'd14) gbe_txdat <= {4'hd,bk_adr[11:0]}; //  <-- 2nd word returns the bk_adr
-                    else                  gbe_txdat <= data_bram_r[15:0];   // added a pipe register for data_bram, allows better timing?
+                else if (bk_adr < MXBRAMS) begin  // this is data_bram range.  for f3f3, f8f8, fbfb...
+                    if (pkt_counter < 16'd14) gbe_txdat <= {4'hd,bk_adr[11:0]}; // <-- 2nd word returns the bk_adr
+                    else                      gbe_txdat <= data_bram_r[15:0];   // added a pipe register for data_bram, allows better timing?
                 end
 
                 // frame synchronization
                 else begin
                     gbe_txdat <= 16'h50bc;  // <-- idle 28.5/16.2
-                    gbe_kout <= 2'h1;
+                    gbe_kout  <= 2'h1;
                 end
 
             end // if (pkt_counter >= 16'd13)
@@ -1009,15 +1020,14 @@ module CSC_GEM_Emulator (
                     rx_timeout  <= 1'b1;               // only set for pretty big jumbo packet, over 8810 bytes
                     gbe_rxcount <= gbe_rxcount;
                 end
-                else
+                else begin
                     gbe_rxcount <= gbe_rxcount + 1'b1;
+                end
 
 
                 // rx_adr to block ram zeroed if we are not updating. Does this even matter ?
-                if (cmd_code != CMD_WRITE)
-                    rx_adr_r[10:0] <= 11'h000;
-                else if (cycle4)
-                    rx_adr_r <= rx_adr;
+                if      (cmd_code != CMD_WRITE) rx_adr_r <= 11'h000;
+                else if (cycle4)                rx_adr_r <= rx_adr;
 
 
                 // timeout reset
@@ -1059,20 +1069,21 @@ module CSC_GEM_Emulator (
                     data_iram[15:0] <= 16'hdddd;
                 end
 
+
                 // parse_data
                 //------------------------------------------------------------------------------------------
-                else if (gbe_rxcount > 16'd4 && cmd_code==CMD_WRITE && bk_adr<=MXBRAMS)
+                else if (gbe_rxcount > 16'd4 && cmd_code==CMD_WRITE && bk_adr<MXBRAMS)
                 begin
                     // loading block ram flag
                     loading_bram <= (rx_adr==MX_RX_ADR) ? 1'b0 : (gbe_rxcount==16'h0005) ? 1'b1 : loading_bram;
 
-                    // synchronization
-                    cycle4       <= loading_bram && (rx_adr[1:0]==2'h3); // cannot begin before rx_count=6
+                    // produces a synchronization pulse when the last word of a ram block is being read
+                    cycle4 <= loading_bram && (iram_word==2'h3); // cannot begin before rx_count=6
 
                     // increment rx_addr until we reach the maximum counter
-                    rx_adr   <= (rx_adr==11'h7ff) ? rx_adr : rx_adr + 1'b1; // 7ff==2047; 2047/4 cyclces = 511.... 512 entires in bram. voila
+                    rx_adr <= (rx_adr==11'h7ff) ? rx_adr : rx_adr + 1'b1; // 7ff==2047; 2047/4 cyclces = 511.... 512 entires in bram. voila
 
-                    case (rx_adr[1:0])
+                    case (iram_word)
                         2'h0: data_iram[15:0]  <= gbe_rxdat[15:0];
                         2'h1: data_iram[31:16] <= gbe_rxdat[15:0];
                         2'h2: data_iram[47:32] <= gbe_rxdat[15:0];
@@ -1103,9 +1114,9 @@ module CSC_GEM_Emulator (
 
     always @(*) begin
         case (data_state)
-            2'h0: tx_out = gbe_txdat[15:0];
-            2'h1: tx_out = crc_out[15:0];  // send out CRC "MSB-first"; it's already inverted and backwards
-            2'h2: tx_out = crc_out[31:16];
+            2'h0: tx_out = gbe_txdat[15:0 ];
+            2'h1: tx_out = crc_out  [15:0 ];  // send out CRC "MSB-first"; it's already inverted and backwards
+            2'h2: tx_out = crc_out  [31:16];
             2'h3: tx_out = EOF;
         endcase
 
@@ -1125,7 +1136,7 @@ module CSC_GEM_Emulator (
     wire [1:0]  rx_disp;  // other signals for GTX
     wire [3:0]  ignore;  // outputs from GTX we don't care about
     wire [1:0]  rx_lostsync;
-    wire  gbe_tx_outclk; // out from Tx PLL
+    wire        gbe_tx_outclk; // out from Tx PLL
 
     GBE_T20R20 gbe_gtx (
         gbe_refck,         // GTX0_DOUBLE_RESET_CLK_IN,
@@ -1195,14 +1206,61 @@ module CSC_GEM_Emulator (
         tx_resetdone       // GTX0_TXRESETDONE_OUT
     );
 
-    wire gbe_sump =  (|rx_comma)
-                    |(|rx_disp)
-                    |(|ignore)
-                    |(|rx_lostsync);
-
+    wire gbe_sump =  (|rx_comma) |(|rx_disp) |(|ignore) |(|rx_lostsync);
 
 //----------------------------------------------------------------------------------------------------------------------
-// qpll lock lost
+// GEM Data Processing
+//----------------------------------------------------------------------------------------------------------------------
+
+    wire [63:0] vfat_sbits [23:0];
+
+    genvar ivfat;
+    generate;
+    for (ivfat=0; ivfat<24; ivfat=ivfat+1) begin: fatloop
+        assign vfat_sbits[ivfat] = data_oram[ivfat+8];
+    end
+    endgenerate
+
+
+    wire [191:0] partition0, partition1, partition2, partition3, partition4, partition5, partition6, partition7;
+
+    assign partition0 = {vfat_sbits[0], vfat_sbits[8],  vfat_sbits[16]};
+    assign partition1 = {vfat_sbits[1], vfat_sbits[9],  vfat_sbits[17]};
+    assign partition2 = {vfat_sbits[2], vfat_sbits[10], vfat_sbits[18]};
+    assign partition3 = {vfat_sbits[3], vfat_sbits[11], vfat_sbits[19]};
+    assign partition4 = {vfat_sbits[4], vfat_sbits[12], vfat_sbits[20]};
+    assign partition5 = {vfat_sbits[5], vfat_sbits[13], vfat_sbits[21]};
+    assign partition6 = {vfat_sbits[6], vfat_sbits[14], vfat_sbits[22]};
+    assign partition7 = {vfat_sbits[7], vfat_sbits[15], vfat_sbits[23]};
+
+
+//        csc_data_packer u_csc_data_packer (
+//            .clock      (lhc_ck),
+//            .reset      (1'b0),
+//
+//            .partition0 (partition0),
+//            .partition1 (partition1),
+//            .partition2 (partition2),
+//            .partition3 (partition3),
+//            .partition4 (partition4),
+//            .partition5 (partition5),
+//            .partition6 (partition6),
+//            .partition7 (partition7),
+//
+//            .hit0       (hit0),
+//            .hit1       (hit1),
+//            .hit2       (hit2),
+//            .hit3       (hit3),
+//            .hit4       (hit4),
+//            .hit5       (hit5),
+//            .hit6       (hit6),
+//            .hit7       (hit7)
+//        );
+
+//    wire gem_sump = (|hit0[13:0]) | (|hit1[13:0]) | (|hit2[13:0]) | (|hit3[13:0]) | (|hit4[13:0]) | (|hit5[13:0]) | (|hit6[13:0]) | (|hit7[13:0]);
+
+//----------------------------------------------------------------------------------------------------------------------
+// qpll lock lost latch
 //----------------------------------------------------------------------------------------------------------------------
 
     reg qpll_lock_lost;
@@ -1238,7 +1296,7 @@ module CSC_GEM_Emulator (
 
     // JGhere, fiber Tx "from DCFEB" section:
     //   was Snap12 module, not cfeb-tmb test code
-    tmb_fiber_out  gem0out   (
+    gem_fiber_out  gem0out   (
         .RST                 (reset),                 // Manual only
         .TRG_SIGDET          (),                      // from IPAD to IBUF.  N/A?
         .TRG_RX_N            (),                      // empty
@@ -1246,19 +1304,17 @@ module CSC_GEM_Emulator (
         .TRG_TDIS            (),                      // OBUF output, for what?  N/A?
         .TRG_TX_N            (txn[0]),                // pick a fiber
         .TRG_TX_P            (txp[0]),                // pick a fiber
-        .G6C                 (fiber_out[0][7:0]),     // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-        .G5C                 (fiber_out[0][15:8]),    // if ENA_TEST_PAT then it's prbs so these don't matter...
-        .G4C                 (fiber_out[0][23:16]),   // but good for testing low-rate non-zero triad data:
-        .G3C                 (fiber_out[0][31:24]),
-        .G2C                 (fiber_out[0][39:32]),
-        .G1C                 (fiber_out[0][47:40]),
+
+        .GEM_DATA            (gem_fiber_out[0][55:0 ]),
+
         .TRG_TX_REFCLK       (ck160),                 // QPLL 160 from MGT clk
         .TRG_TXUSRCLK        (snap_clk2),             // get 160 from TXOUTCLK (times 2)
         .TRG_CLK80           (tx_clk),                // get 80 from TXOUTCLK
         .TRG_GTXTXRST        (1'b0     ),             // maybe Manual "reset" only
         .TRG_TX_PLLRST       (txpll_rst),             // Tie LOW.
         .TRG_RST             (fiber_reset),           // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        .ENA_TEST_PAT        (sw[8]),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        .ENA_TEST_PAT        (1'b0),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        //.ENA_TEST_PAT        (sw[8]),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
         .INJ_ERR             (ferr_f[0] & sw[8]),     // use my switch/PB combo logic for this, high-true? Pulse high once.
         .TRG_SD              (),                      // from IBUF, useless output. N/A
         .TRG_TXOUTCLK        (),                      // 80 MHz; This has to go to MCM to generate 160/80
@@ -1272,27 +1328,28 @@ module CSC_GEM_Emulator (
         .MON_TRG_TX_DATA     ()                       // N/A returns 32 bits
     );
 
-    tmb_fiber_out  dcfeb1out (
+    dcfeb_fiber_out  dcfeb1out (
         .RST                 ( reset),               // Manual only
-        .TRG_SIGDET          ( ),                    // from IPAD to IBUF.  N/A?
+        .TRG_SIGDET          (),                      // from IPAD to IBUF.  N/A?
         .TRG_RX_N            ( ),                    // empty
         .TRG_RX_P            ( ),                    // empty
         .TRG_TDIS            ( ),                    // OBUF output, for what?  N/A?
         .TRG_TX_N            ( txn[1]),              // pick a fiber
         .TRG_TX_P            ( txp[1]),              // pick a fiber
-        .G1C                 ( fiber_out[1][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-        .G2C                 ( fiber_out[1][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
-        .G3C                 ( fiber_out[1][23:16]), // but good for testing low-rate non-zero triad data:
-        .G4C                 ( fiber_out[1][31:24]),
-        .G5C                 ( fiber_out[1][39:32]),
-        .G6C                 ( fiber_out[1][47:40]),
+        .G1C                 ( cfeb_fiber_out[1][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+        .G2C                 ( cfeb_fiber_out[1][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
+        .G3C                 ( cfeb_fiber_out[1][23:16]), // but good for testing low-rate non-zero triad data:
+        .G4C                 ( cfeb_fiber_out[1][31:24]),
+        .G5C                 ( cfeb_fiber_out[1][39:32]),
+        .G6C                 ( cfeb_fiber_out[1][47:40]),
         .TRG_TX_REFCLK       ( ck160),               // QPLL 160 from MGT clk
         .TRG_TXUSRCLK        ( snap_clk2),           // get 160 from TXOUTCLK (times 2)
         .TRG_CLK80           ( tx_clk),              // get 80 from TXOUTCLK
         .TRG_GTXTXRST        ( txpll_rst),           // maybe Manual "reset" only
         .TRG_TX_PLLRST       ( txpll_rst),           // Tie LOW.
         .TRG_RST             ( fiber_reset),         // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        .ENA_TEST_PAT        ( sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        //.ENA_TEST_PAT        ( sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        .ENA_TEST_PAT        (1'b0),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
         .INJ_ERR             ( ferr_f[1] & sw[8]),   // use my switch/PB combo logic for this, high-true? Pulse high once.
         .TRG_SD              ( ),                    // from IBUF, useless output. N/A
         .TRG_TXOUTCLK        ( tx_clk_out),          // 80 MHz; This has to go to MCM to generate 160/80
@@ -1306,27 +1363,28 @@ module CSC_GEM_Emulator (
         .MON_TRG_TX_DATA     ( )                     // N/A returns 32 bits
     );
 
-    tmb_fiber_out  dcfeb2out (
+    dcfeb_fiber_out  dcfeb2out (
         .RST                 ( reset),               // Manual only
-        .TRG_SIGDET          ( ),                    // from IPAD to IBUF.  N/A?
+        .TRG_SIGDET          (),                      // from IPAD to IBUF.  N/A?
         .TRG_RX_N            ( ),                    // empty
         .TRG_RX_P            ( ),                    // empty
         .TRG_TDIS            ( ),                    // OBUF output, for what?  N/A?
         .TRG_TX_N            ( txn[2]),              // pick a fiber
         .TRG_TX_P            ( txp[2]),              // pick a fiber
-        .G1C                 ( fiber_out[2][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-        .G2C                 ( fiber_out[2][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
-        .G3C                 ( fiber_out[2][23:16]), // but good for testing low-rate non-zero triad data:
-        .G4C                 ( fiber_out[2][31:24]),
-        .G5C                 ( fiber_out[2][39:32]),
-        .G6C                 ( fiber_out[2][47:40]),
+        .G1C                 ( cfeb_fiber_out[2][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+        .G2C                 ( cfeb_fiber_out[2][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
+        .G3C                 ( cfeb_fiber_out[2][23:16]), // but good for testing low-rate non-zero triad data:
+        .G4C                 ( cfeb_fiber_out[2][31:24]),
+        .G5C                 ( cfeb_fiber_out[2][39:32]),
+        .G6C                 ( cfeb_fiber_out[2][47:40]),
         .TRG_TX_REFCLK       ( ck160),               // QPLL 160 from MGT clk
         .TRG_TXUSRCLK        ( snap_clk2),           // get 160 from TXOUTCLK (times 2)
         .TRG_CLK80           ( tx_clk),              // get 80 from TXOUTCLK
         .TRG_GTXTXRST        ( 1'b0),                // maybe Manual "reset" only
         .TRG_TX_PLLRST       ( 1'b0),                // Tie LOW.
         .TRG_RST             ( fiber_reset),         // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        .ENA_TEST_PAT        ( sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        //.ENA_TEST_PAT        ( sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        .ENA_TEST_PAT        (1'b0),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
         .INJ_ERR             ( ferr_f[2] & sw[8]),   // use my switch/PB combo logic for this, high-true? Pulse high once.
         .TRG_SD              ( ),                    // from IBUF, useless output. N/A
         .TRG_TXOUTCLK        ( ),                    // 80 MHz; This has to go to MCM to generate 160/80
@@ -1340,27 +1398,28 @@ module CSC_GEM_Emulator (
         .MON_TRG_TX_DATA     ( )                     // N/A returns 32 bits
     );
 
-    tmb_fiber_out  dcfeb3out (
+    dcfeb_fiber_out  dcfeb3out (
         .RST                 ( reset),               // Manual only
-        .TRG_SIGDET          ( ),                    // from IPAD to IBUF.  N/A?
+        .TRG_SIGDET          (),                      // from IPAD to IBUF.  N/A?
         .TRG_RX_N            ( ),                    // empty
         .TRG_RX_P            ( ),                    // empty
         .TRG_TDIS            ( ),                    // OBUF output, for what?  N/A?
         .TRG_TX_N            ( txn[3]),              // pick a fiber
         .TRG_TX_P            ( txp[3]),              // pick a fiber
-        .G1C                 ( fiber_out[3][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-        .G2C                 ( fiber_out[3][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
-        .G3C                 ( fiber_out[3][23:16]), // but good for testing low-rate non-zero triad data:
-        .G4C                 ( fiber_out[3][31:24]),
-        .G5C                 ( fiber_out[3][39:32]),
-        .G6C                 ( fiber_out[3][47:40]),
+        .G1C                 ( cfeb_fiber_out[3][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+        .G2C                 ( cfeb_fiber_out[3][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
+        .G3C                 ( cfeb_fiber_out[3][23:16]), // but good for testing low-rate non-zero triad data:
+        .G4C                 ( cfeb_fiber_out[3][31:24]),
+        .G5C                 ( cfeb_fiber_out[3][39:32]),
+        .G6C                 ( cfeb_fiber_out[3][47:40]),
         .TRG_TX_REFCLK       ( ck160),               // QPLL 160 from MGT clk
         .TRG_TXUSRCLK        ( snap_clk2),           // get 160 from TXOUTCLK (times 2)
         .TRG_CLK80           ( tx_clk),              // get 80 from TXOUTCLK
         .TRG_GTXTXRST        ( 1'b0),                // maybe Manual "reset" only
         .TRG_TX_PLLRST       ( 1'b0),                // Tie LOW.
         .TRG_RST             ( fiber_reset),         // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        .ENA_TEST_PAT        ( sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        //.ENA_TEST_PAT        ( sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        .ENA_TEST_PAT        (1'b0),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
         .INJ_ERR             ( ferr_f[3] & sw[8]),   // use my switch/PB combo logic for this, high-true? Pulse high once.
         .TRG_SD              ( ),                    // from IBUF, useless output. N/A
         .TRG_TXOUTCLK        ( ),                    // 80 MHz; This has to go to MCM to generate 160/80
@@ -1374,27 +1433,28 @@ module CSC_GEM_Emulator (
         .MON_TRG_TX_DATA     ( )                     // N/A returns 32 bits
     );
 
-    tmb_fiber_out  dcfeb4out (
+    dcfeb_fiber_out  dcfeb4out (
         .RST                 ( reset),               // Manual only
-        .TRG_SIGDET          ( ),                    // from IPAD to IBUF.  N/A?
+        .TRG_SIGDET          (),                      // from IPAD to IBUF.  N/A?
         .TRG_RX_N            ( ),                    // empty
         .TRG_RX_P            ( ),                    // empty
         .TRG_TDIS            ( ),                    // OBUF output, for what?  N/A?
         .TRG_TX_N            ( txn[4]),              // pick a fiber
         .TRG_TX_P            ( txp[4]),              // pick a fiber
-        .G1C                 ( fiber_out[4][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-        .G2C                 ( fiber_out[4][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
-        .G3C                 ( fiber_out[4][23:16]), // but good for testing low-rate non-zero triad data:
-        .G4C                 ( fiber_out[4][31:24]),
-        .G5C                 ( fiber_out[4][39:32]),
-        .G6C                 ( fiber_out[4][47:40]),
+        .G1C                 ( cfeb_fiber_out[4][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+        .G2C                 ( cfeb_fiber_out[4][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
+        .G3C                 ( cfeb_fiber_out[4][23:16]), // but good for testing low-rate non-zero triad data:
+        .G4C                 ( cfeb_fiber_out[4][31:24]),
+        .G5C                 ( cfeb_fiber_out[4][39:32]),
+        .G6C                 ( cfeb_fiber_out[4][47:40]),
         .TRG_TX_REFCLK       ( ck160),               // QPLL 160 from MGT clk
         .TRG_TXUSRCLK        ( snap_clk2),           // get 160 from TXOUTCLK (times 2)
         .TRG_CLK80           ( tx_clk),              // get 80 from TXOUTCLK
         .TRG_GTXTXRST        ( 1'b0),                // maybe Manual "reset" only
         .TRG_TX_PLLRST       ( 1'b0),                // Tie LOW.
         .TRG_RST             ( fiber_reset),         // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        .ENA_TEST_PAT        ( sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        //.ENA_TEST_PAT        ( sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        .ENA_TEST_PAT        (1'b0),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
         .INJ_ERR             ( ferr_f[4] & sw[8]),   // use my switch/PB combo logic for this, high-true? Pulse high once.
         .TRG_SD              ( ),                    // from IBUF, useless output. N/A
         .TRG_TXOUTCLK        ( ),                    // 80 MHz; This has to go to MCM to generate 160/80
@@ -1408,27 +1468,28 @@ module CSC_GEM_Emulator (
         .MON_TRG_TX_DATA     ( )                     // N/A returns 32 bits
     );
 
-    tmb_fiber_out  dcfeb5out  (
+    dcfeb_fiber_out  dcfeb5out  (
         .RST                  (reset),               // Manual only
-        .TRG_SIGDET           (),                    // from IPAD to IBUF.  N/A?
+        .TRG_SIGDET          (),                      // from IPAD to IBUF.  N/A?
         .TRG_RX_N             (),                    // empty
         .TRG_RX_P             (),                    // empty
         .TRG_TDIS             (),                    // OBUF output, for what?  N/A?
         .TRG_TX_N             (txn[5]),              // pick a fiber
         .TRG_TX_P             (txp[5]),              // pick a fiber
-        .G1C                  (fiber_out[5][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-        .G2C                  (fiber_out[5][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
-        .G3C                  (fiber_out[5][23:16]), // but good for testing low-rate non-zero triad data:
-        .G4C                  (fiber_out[5][31:24]),
-        .G5C                  (fiber_out[5][39:32]),
-        .G6C                  (fiber_out[5][47:40]),
+        .G1C                  (cfeb_fiber_out[5][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+        .G2C                  (cfeb_fiber_out[5][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
+        .G3C                  (cfeb_fiber_out[5][23:16]), // but good for testing low-rate non-zero triad data:
+        .G4C                  (cfeb_fiber_out[5][31:24]),
+        .G5C                  (cfeb_fiber_out[5][39:32]),
+        .G6C                  (cfeb_fiber_out[5][47:40]),
         .TRG_TX_REFCLK        (ck160),               // QPLL 160 from MGT clk
         .TRG_TXUSRCLK         (snap_clk2),           // get 160 from TXOUTCLK (times 2)
         .TRG_CLK80            (tx_clk),              // get 80 from TXOUTCLK
         .TRG_GTXTXRST         (1'b0),                // maybe Manual "reset" only
         .TRG_TX_PLLRST        (1'b0),                // Tie LOW.
         .TRG_RST              (fiber_reset),         // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        .ENA_TEST_PAT         (sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers) Use This Later, send low-rate pattern.
+        //.ENA_TEST_PAT         (sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers) Use This Later, send low-rate pattern.
+        .ENA_TEST_PAT        (1'b0),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
         .INJ_ERR              (ferr_f[5] & sw[8]),   // use my switch/PB combo logic for this, high-true? Pulse high once.
         .TRG_SD               (),                    // from IBUF, useless output. N/A
         .TRG_TXOUTCLK         (),                    // 80 MHz; This has to go to MCM to generate 160/80
@@ -1442,27 +1503,28 @@ module CSC_GEM_Emulator (
         .MON_TRG_TX_DATA      ()                     // N/A returns 32 bits
     );
 
-    tmb_fiber_out  dcfeb6out  (
+    dcfeb_fiber_out  dcfeb6out  (
         .RST                  ( reset),               // Manual only
-        .TRG_SIGDET           ( ),                    // from IPAD to IBUF.  N/A?
+        .TRG_SIGDET          (),                      // from IPAD to IBUF.  N/A?
         .TRG_RX_N             ( ),                    // empty
         .TRG_RX_P             ( ),                    // empty
         .TRG_TDIS             ( ),                    // OBUF output, for what?  N/A?
         .TRG_TX_N             ( txn[6]),              // pick a fiber
         .TRG_TX_P             ( txp[6]),              // pick a fiber
-        .G1C                  ( fiber_out[6][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-        .G2C                  ( fiber_out[6][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
-        .G3C                  ( fiber_out[6][23:16]), // but good for testing low-rate non-zero triad data:
-        .G4C                  ( fiber_out[6][31:24]),
-        .G5C                  ( fiber_out[6][39:32]),
-        .G6C                  ( fiber_out[6][47:40]),
+        .G1C                  ( cfeb_fiber_out[6][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+        .G2C                  ( cfeb_fiber_out[6][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
+        .G3C                  ( cfeb_fiber_out[6][23:16]), // but good for testing low-rate non-zero triad data:
+        .G4C                  ( cfeb_fiber_out[6][31:24]),
+        .G5C                  ( cfeb_fiber_out[6][39:32]),
+        .G6C                  ( cfeb_fiber_out[6][47:40]),
         .TRG_TX_REFCLK        ( ck160),               // QPLL 160 from MGT clk
         .TRG_TXUSRCLK         ( snap_clk2),           // get 160 from TXOUTCLK (times 2)
         .TRG_CLK80            ( tx_clk),              // get 80 from TXOUTCLK
         .TRG_GTXTXRST         ( 1'b0),                // maybe Manual "reset" only
         .TRG_TX_PLLRST        ( 1'b0),                // Tie LOW.
         .TRG_RST              ( fiber_reset),         // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        .ENA_TEST_PAT         ( sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers) Use This Later, send low-rate pattern.
+        //.ENA_TEST_PAT       ( sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers) Use This Later, send low-rate pattern.
+        .ENA_TEST_PAT         (1'b0),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
         .INJ_ERR              ( ferr_f[6] & sw[8]),   // use my switch/PB combo logic for this, high-true? Pulse high once.
         .TRG_SD               ( ),                    // from IBUF, useless output. N/A
         .TRG_TXOUTCLK         ( ),                    // 80 MHz; This has to go to MCM to generate 160/80
@@ -1476,27 +1538,28 @@ module CSC_GEM_Emulator (
         .MON_TRG_TX_DATA      ( )                     // N/A returns 32 bits
     );
 
-    tmb_fiber_out  dcfeb7out (
+    dcfeb_fiber_out  dcfeb7out (
         .RST                 ( reset),               // Manual only
-        .TRG_SIGDET          ( ),                    // from IPAD to IBUF.  N/A?
+        .TRG_SIGDET          (),                      // from IPAD to IBUF.  N/A?
         .TRG_RX_N            ( ),                    // empty
         .TRG_RX_P            ( ),                    // empty
         .TRG_TDIS            ( ),                    // OBUF output, for what?  N/A?
         .TRG_TX_N            ( txn[7]),              // pick a fiber
         .TRG_TX_P            ( txp[7]),              // pick a fiber
-        .G1C                 ( fiber_out[7][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-        .G2C                 ( fiber_out[7][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
-        .G3C                 ( fiber_out[7][23:16]), // but good for testing low-rate non-zero triad data:
-        .G4C                 ( fiber_out[7][31:24]),
-        .G5C                 ( fiber_out[7][39:32]),
-        .G6C                 ( fiber_out[7][47:40]),
+        .G1C                 ( cfeb_fiber_out[7][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+        .G2C                 ( cfeb_fiber_out[7][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
+        .G3C                 ( cfeb_fiber_out[7][23:16]), // but good for testing low-rate non-zero triad data:
+        .G4C                 ( cfeb_fiber_out[7][31:24]),
+        .G5C                 ( cfeb_fiber_out[7][39:32]),
+        .G6C                 ( cfeb_fiber_out[7][47:40]),
         .TRG_TX_REFCLK       ( ck160),               // QPLL 160 from MGT clk
         .TRG_TXUSRCLK        ( snap_clk2),           // get 160 from TXOUTCLK                                                                                                                                                                           ( times 2)
         .TRG_CLK80           ( tx_clk),              // get 80 from TXOUTCLK
         .TRG_GTXTXRST        ( 1'b0),                // maybe Manual "reset" only
         .TRG_TX_PLLRST       ( 1'b0),                // Tie LOW.
         .TRG_RST             ( fiber_reset),         // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        .ENA_TEST_PAT        ( sw[8]),               // HIGH for PRBS!                                                                                                                                                                                  ( Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        //.ENA_TEST_PAT        ( sw[8]),               // HIGH for PRBS!                                                                                                                                                                                  ( Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        .ENA_TEST_PAT        (1'b0),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
         .INJ_ERR             ( ferr_f[7] & sw[8]),   // use my switch/PB combo logic for this, high-true? Pulse high once.
         .TRG_SD              ( ),                    // from IBUF, useless output. N/A
         .TRG_TXOUTCLK        ( ),                    // 80 MHz; This has to go to MCM to generate 160/80
@@ -1512,19 +1575,16 @@ module CSC_GEM_Emulator (
 
     wire fiberout_sump = (|tx_begin[7:0]) | (|tx_fc[7:0]) |synced_snapt | t12_fault | r12_fok;
 
-
-
-
 //----------------------------------------------------------------------------------------------------------------------
 // LED Assignments
 //----------------------------------------------------------------------------------------------------------------------
 
 x_flashsm #(22) led0 (.trigger(loading_bram),         .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_led));
-x_flashsm #(22) led1 (.trigger(!dump_done),           .hold(1'b0), .clock(gbe_txclk2), .out(dump_done_led_n));
+x_flashsm #(22) led1 (.trigger(cmd_code==CMD_DUMP),   .hold(1'b0), .clock(gbe_txclk2), .out(dump_led));
 x_flashsm #(22) led2 (.trigger(cmd_code==CMD_WRITE),  .hold(1'b0), .clock(gbe_txclk2), .out(cmd_code_led));
 x_flashsm #(22) led3 (.trigger(gbe_rxdat==CMD_WRITE), .hold(1'b0), .clock(gbe_txclk2), .out(rxdat_led));
-x_flashsm #(22) led4 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_adr<=MXBRAMS && gbe_rxcount==16'h5), .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_led2));
-x_flashsm #(22) led5 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_adr<=MXBRAMS && rx_adr==11'h7ff), .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_done));
+x_flashsm #(22) led4 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_adr<MXBRAMS && gbe_rxcount==16'h5), .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_led2));
+x_flashsm #(22) led5 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_adr<MXBRAMS && rx_adr==11'h7ff), .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_done));
 
     wire sump = gbe_sump | fiberout_sump | clk_sump;
 
@@ -1540,7 +1600,7 @@ x_flashsm #(22) led5 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_ad
         led_low[7] =  1'b0;             // lhc_clk;                                // just reset, includes ccb_rx[1]==L1reset
 
         led_hi[8]  = ~ (1'b0 ^ loading_bram_led  ); //!(hold_bit | gtx_reset) ; // M1: synced with PB & errors at crate Rx
-        led_hi[9]  = ~ (1'b0 ^ dump_done_led_n   ); // qpll_lock_lost         ; // 0
+        led_hi[9]  = ~ (1'b0 ^ dump_led          ); // qpll_lock_lost         ; // 0
         led_hi[10] = ~ (1'b0 ^ cmd_code_led      ); //!cmd_code[7]            ; // !gtx_reset                              ; // 0
         led_hi[11] = ~ (1'b0 ^ rxdat_led         ); //!rd_ptr[8]              ; // ~6.25 usec  // gtx_ready                ; // 1
         led_hi[12] = ~ (1'b0 ^ loading_bram_led2 ); //!dump_enable_rr         ; // 12.5 usec   //

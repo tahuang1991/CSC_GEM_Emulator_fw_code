@@ -18,7 +18,7 @@
 // Additional Comments:
 //
 //////////////////////////////////////////////////////////////////////////////////
-module tmb_fiber_out #( parameter SIM_SPEEDUP = 0)
+module dcfeb_fiber_out #( parameter SIM_SPEEDUP = 0)
 (
 	input         RST,           // only used for PRBS reset
 	input         TRG_SIGDET,    // ??
