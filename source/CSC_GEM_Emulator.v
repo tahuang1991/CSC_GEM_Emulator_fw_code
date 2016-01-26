@@ -484,6 +484,9 @@ module CSC_GEM_Emulator (
 
     wire [55:0] gem_data_mux = sw[8] ? 56'hfeedadeadabeef : 56'h00000000000000;
 
+    wire [55:0] gem_packet0;
+    wire [55:0] gem_packet1;
+
     reg [55:0] gem_fiber_out [1:0];
     reg [47:0] cfeb_fiber_out[7:0];
     always @(negedge ck40) begin  // 80 MHz derived from GTX_TxPLL
@@ -1228,43 +1231,54 @@ module CSC_GEM_Emulator (
     end
     endgenerate
 
+    wire [13:0] cluster [7:0];
 
-    wire [191:0] partition0, partition1, partition2, partition3, partition4, partition5, partition6, partition7;
+    cluster_packer u_cluster_packer (
 
-    assign partition0 = {vfat_sbits[0], vfat_sbits[8],  vfat_sbits[16]};
-    assign partition1 = {vfat_sbits[1], vfat_sbits[9],  vfat_sbits[17]};
-    assign partition2 = {vfat_sbits[2], vfat_sbits[10], vfat_sbits[18]};
-    assign partition3 = {vfat_sbits[3], vfat_sbits[11], vfat_sbits[19]};
-    assign partition4 = {vfat_sbits[4], vfat_sbits[12], vfat_sbits[20]};
-    assign partition5 = {vfat_sbits[5], vfat_sbits[13], vfat_sbits[21]};
-    assign partition6 = {vfat_sbits[6], vfat_sbits[14], vfat_sbits[22]};
-    assign partition7 = {vfat_sbits[7], vfat_sbits[15], vfat_sbits[23]};
+        .clock4x (snap_clk2),
 
+        .global_reset (reset),
 
-//        csc_data_packer u_csc_data_packer (
-//            .clock      (lhc_ck),
-//            .reset      (1'b0),
-//
-//            .partition0 (partition0),
-//            .partition1 (partition1),
-//            .partition2 (partition2),
-//            .partition3 (partition3),
-//            .partition4 (partition4),
-//            .partition5 (partition5),
-//            .partition6 (partition6),
-//            .partition7 (partition7),
-//
-//            .hit0       (hit0),
-//            .hit1       (hit1),
-//            .hit2       (hit2),
-//            .hit3       (hit3),
-//            .hit4       (hit4),
-//            .hit5       (hit5),
-//            .hit6       (hit6),
-//            .hit7       (hit7)
-//        );
+        .vfat0  (vfat_sbits[0]),
+        .vfat1  (vfat_sbits[1]),
+        .vfat2  (vfat_sbits[2]),
+        .vfat3  (vfat_sbits[3]),
+        .vfat4  (vfat_sbits[4]),
+        .vfat5  (vfat_sbits[5]),
+        .vfat6  (vfat_sbits[6]),
+        .vfat7  (vfat_sbits[7]),
+        .vfat8  (vfat_sbits[8]),
+        .vfat9  (vfat_sbits[9]),
+        .vfat10 (vfat_sbits[10]),
+        .vfat11 (vfat_sbits[11]),
+        .vfat12 (vfat_sbits[12]),
+        .vfat13 (vfat_sbits[13]),
+        .vfat14 (vfat_sbits[14]),
+        .vfat15 (vfat_sbits[15]),
+        .vfat16 (vfat_sbits[16]),
+        .vfat17 (vfat_sbits[17]),
+        .vfat18 (vfat_sbits[18]),
+        .vfat19 (vfat_sbits[19]),
+        .vfat20 (vfat_sbits[20]),
+        .vfat21 (vfat_sbits[21]),
+        .vfat22 (vfat_sbits[22]),
+        .vfat23 (vfat_sbits[23]),
 
-//    wire gem_sump = (|hit0[13:0]) | (|hit1[13:0]) | (|hit2[13:0]) | (|hit3[13:0]) | (|hit4[13:0]) | (|hit5[13:0]) | (|hit6[13:0]) | (|hit7[13:0]);
+        .truncate_clusters (1'b0),
+
+        .cluster0 (cluster[0]),
+        .cluster1 (cluster[1]),
+        .cluster2 (cluster[2]),
+        .cluster3 (cluster[3]),
+        .cluster4 (cluster[4]),
+        .cluster5 (cluster[5]),
+        .cluster6 (cluster[6]),
+        .cluster7 (cluster[7])
+    );
+
+    assign gem_packet0 = {cluster[3], cluster[2], cluster[1], cluster[0]};
+    assign gem_packet1 = {cluster[7], cluster[6], cluster[5], cluster[4]};
+    wire gem_sump = (|gem_packet0) | (|gem_packet1);
 
 //----------------------------------------------------------------------------------------------------------------------
 // qpll lock lost latch
@@ -1313,6 +1327,7 @@ module CSC_GEM_Emulator (
         .TRG_TX_P            (txp[0]),                // pick a fiber
 
         .GEM_DATA            (gem_fiber_out[0][55:0 ]),
+        .GEM_OVERFLOW        (1'b0),
 
         .TRG_TX_REFCLK       (ck160),                 // QPLL 160 from MGT clk
         .TRG_TXUSRCLK        (snap_clk2),             // get 160 from TXOUTCLK (times 2)
@@ -1593,11 +1608,11 @@ x_flashsm #(22) led3 (.trigger(gbe_rxdat==CMD_WRITE), .hold(1'b0), .clock(gbe_tx
 x_flashsm #(22) led4 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_adr<MXBRAMS && gbe_rxcount==16'h5), .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_led2));
 x_flashsm #(22) led5 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_adr<MXBRAMS && rx_adr==11'h7ff), .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_done));
 
-    wire sump = gbe_sump | fiberout_sump | clk_sump;
+    wire sump = gbe_sump | fiberout_sump | clk_sump | gem_sump;
 
     always @(*)
     begin                               // JG, v1p16: swap LED 3<>4, notes and all
-        led_low[0] =  1'b0; // sump;
+        led_low[0] =  gem_sump;
         led_low[1] =  1'b0;  // 1'b0;
         led_low[2] =  1'b0;             // qpll_lock;                              // always ON!   was !_ccb_rx[31] == _alct_adb_pulse_async
         led_low[3] =  1'b0;             // qpll_lock_lost;                         // always OFF?  was _ccb_rx[35] == mpc_in1, always ON
