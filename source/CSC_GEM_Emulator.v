@@ -392,7 +392,7 @@ module CSC_GEM_Emulator (
     BUFG lhcclkf_buf     ( .O (lhcckfbout_buf), .I (lhcckfbout));
     BUFG lhcclkout0_buf  ( .O (lhc_clk),        .I (lhc_ck0));
 
-    wire clk_sump = lhc_ck180 | lhc_ck270 | ck94 | ck87 | ck15 | stopped;
+    wire clk_sump = lhc_ck180 | lhc_ck270 | ck94 | ck87 | stopped;//ck15 ;
 
 //----------------------------------------------------------------------------------------------------------------------
 // Snap-12 Tx
