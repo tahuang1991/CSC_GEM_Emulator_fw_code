@@ -401,7 +401,14 @@ module CSC_GEM_Emulator (
     // resets
     //------------------------------------------------------------------------------
     wire gtx_ready = tx_resetdone_r & rx_resetdone_r & txoutclk_mmcm_lk & lock40 & ck160_locked;
-    wire reset     = (!sw[7] & !pb);
+
+    // synchronize reset to 40MHz clock
+    reg reset, reset_sync;
+    always @(posedge ck40) begin
+      reset_sync <= (!sw[7] & !pb);
+      reset <= reset_sync;
+    end
+
     wire gtx_reset = reset | !gtx_ready;
     wire rxdv      = ~(|rxer | rx_bufstat[2]) & gbe_fok; // idle is K28.5,D16.2 = BC,50 in time order
 
