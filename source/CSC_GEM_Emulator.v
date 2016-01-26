@@ -1302,10 +1302,10 @@ module CSC_GEM_Emulator (
     SRL16E #(.INIT(16'h7FFF)) SRL16TXPLL(.Q(txpll_rst), .A0(1'b1), .A1(1'b1), .A2(1'b1), .A3(1'b1), .CE (1'b1), .CLK(qpll_ck40), .D(1'b0));
 
     bufg_x2div2plus snap_mmcm (
-        .CLK_IN1              ( tx_clk_out    ) ,
-        .CLK_OUT1             ( tx_clk        ) ,
-        .CLK_OUT2             ( snap_clk2     ) ,
-        .CLK_OUT3             ( ck40          ) ,
+        .CLK_IN1              ( tx_clk_out    ) , // 80 MHz
+        .CLK_OUT1             ( tx_clk        ) , // 80 MHz
+        .CLK_OUT2             ( snap_clk2     ) , // 160 MHz
+        .CLK_OUT3             ( ck40          ) , // 40 MHz
         .RESET                ( !ck160_locked ) ,
         .LOCKED               ( lock40        ) ,
         .CLK_OUT3BUF          ( ck40buf       ) // from Tx GTX PLL out clk
