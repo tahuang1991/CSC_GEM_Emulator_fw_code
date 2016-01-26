@@ -161,6 +161,7 @@ NET "ck160p" LOC = AB6 | IOSTANDARD = "LVDS_25";
 # NET "ck160" TNM_NET = "clock160";
 NET "snap_clk2" TNM_NET = "clock160";
 TIMESPEC "TS_clock160" = PERIOD "clock160" 6.25 ns HIGH 50%;
+TIMESPEC "TS_ck160" = PERIOD "ck160" 6.25 ns HIGH 50%;
 
 NET "lhc_ckn" LOC = B10 | IOSTANDARD = "LVDS_25";  # this is differential 40 MHz from QPLL
 NET "lhc_ckp" LOC = A10 | IOSTANDARD = "LVDS_25";
