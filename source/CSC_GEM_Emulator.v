@@ -120,6 +120,7 @@ module CSC_GEM_Emulator (
     parameter CMD_WRITE   = 16'hf7f7; // writes to block ram
     parameter CMD_READ    = 16'hf3f3; // reads from block ram
     parameter CMD_DUMP    = 16'hfdfd; // dump block ram contents
+    parameter CMD_PACK    = 16'hf1f1; // fill block ram through cluster packer
 
     // not used in sw
     parameter CMD_SEND    = 16'hfefe;
@@ -175,8 +176,20 @@ module CSC_GEM_Emulator (
     wire        ck125, ck160, lhc_ck, lhc_clk, qpll_ck40, slwclk; // ext 125 usr, QPLL160, ccb_ck40, QPLL40, ccb_ck40/25=1.6MHz
     wire        lhc_ck0, lhc_ck90, lhc_ck180, lhc_ck270, lhcckfbout, lhcckfbout_buf;
 
-    wire        ck40, ck40buf, rdclk;
-    reg 	      sel_rdclk;
+    wire        ck40, ck40buf, rdclk, wrclk;
+    reg 	    sel_rdclk = 0;
+    reg         sel_wrclk = 0;
+
+    // pack state machine counters
+
+    reg [15:0] pack_rd_adr = 0;
+    reg [15:0] pack_wr_adr = 0;
+    reg [3:0]  pack_delay = 0;
+    reg pack_rd = 0;
+    reg pack_wr = 0;
+    reg packing = 0;
+    reg chm_fb = 0;
+    reg [11:0] chm_adr;
 
     // Add-ons for Ben dCFEB testing:
     //-------------------------------
@@ -413,6 +426,7 @@ module CSC_GEM_Emulator (
     wire rxdv      = ~(|rxer | rx_bufstat[2]) & gbe_fok; // idle is K28.5,D16.2 = BC,50 in time order
 
     wire [8:0]  rd_addr;
+    wire [8:0]  wr_addr;
     reg  [15:0] rd_ptr=0;
 
     // we split the 125 MHz 16 bit cmd into two 62.5 MHz 8-bit commands.
@@ -477,7 +491,8 @@ module CSC_GEM_Emulator (
             ibx <= (dump_enable_r) ? 8'h0 : (ibx<nbx_r) ? ibx + 1'b1 : ibx;
 
         // JGhere, use rd_ptr as BRAM RdAddr unless f3f3 is set ? use sel_rdclk for it!
-        rd_ptr <= ibx_reset ? 16'b0 : (dump_enable_rr || event_enable_r) && (!event_done) ? rd_ptr + 1'b1 : rd_ptr;
+        if(!pack_rd) rd_ptr <= ibx_reset ? 16'b0 : (dump_enable_rr || event_enable_r) && (!event_done) ? rd_ptr + 1'b1 : rd_ptr;
+        else rd_ptr <= {2'b0,pack_rd_adr[15:2]};
 
     end // close rdclk
 
@@ -581,19 +596,35 @@ module CSC_GEM_Emulator (
 
     BUFGMUX rdclk_buf (.O (rdclk), .I0 (ck40buf),.I1 (gbe_txclk2_buf), .S(sel_rdclk));
 
+    BUFGMUX wrclk_buf (.O (wrclk), .I0 (ck40buf),.I1 (gbe_txclk2_buf), .S(sel_wrclk));
+
 //----------------------------------------------------------------------------------------------------------------------
 // Block Ram Generation for Pattern Injection
 //----------------------------------------------------------------------------------------------------------------------
 
     assign rd_addr = (sel_rdclk) ? tx_adr[10:2] : rd_ptr[8:0];
+    assign wr_addr = (pack_wr) ? pack_wr_adr[10:2] : rx_adr_r[10:2];
+
+    wire [31:0] data_in0;
+    wire [31:0] data_in1;
+
+    wire valid_gem0;
+
+    assign valid_gem0 = ~&{gem_packet0[10:9],gem_packet0[24:23]};
+
+    assign data_in0 = packing ? (chm_fb ? {gem_packet1[23:0],8'b0} : {gem_packet0[23:0],8'b0}) : data_iram[31:0];
+    assign data_in1 = packing ? (chm_fb ? gem_packet1[55:24] : gem_packet0[55:24]) : data_iram[63:32];
 
     wire bram_rd_en[MXBRAMS-1:0];
+    wire bram_wr_en[MXBRAMS-1:0];
 
     genvar ibram;
     generate
     for (ibram=12'h000; ibram<MXBRAMS; ibram=ibram+1'b1) begin:bramgen
 
-        assign bram_rd_en[ibram] = send_event || ((cmd_code==CMD_READ) & (bk_adr==ibram) & gtx_ready);
+        assign bram_rd_en[ibram] = send_event || ((cmd_code==CMD_READ) & (bk_adr==ibram) & gtx_ready) || (pack_rd && ibram > 7);
+        assign bram_wr_en[ibram] = (cycle4 & (bk_adr==ibram) & gtx_ready) || (pack_wr && 
+            ((chm_adr == 0 && chm_fb ==0 && ibram == 0) || (chm_adr == 0 && chm_fb == 1 && ibram == 5) || (chm_adr == 1 && chm_fb ==0 && ibram == 6) || (chm_adr == 1 && chm_fb == 1 && ibram == 7)));
 
         RAMB36E1 #(
             .DOA_REG        (0),         // Optional output register ( 0 or 1)
@@ -616,15 +647,15 @@ module CSC_GEM_Emulator (
         block_ram_ecc (
             // read and write address
             .ADDRARDADDR    ({1'b1, rd_addr  [8:0], 6'h3f}),  // 16 bit RDADDR, but only 14:6 are used w/ECC.  1/3f?
-            .ADDRBWRADDR    ({1'b1, rx_adr_r[10:2], 6'h3f}),  // 16 bit WRADDR, but only 14:6 are used w/ECC.  1/3f?
+            .ADDRBWRADDR    ({1'b1, wr_addr  [8:0], 6'h3f}),  // 16 bit WRADDR, but only 14:6 are used w/ECC.  1/3f?
 
             // read and write clock
             .CLKARDCLK      (rdclk),                                // RDCLK
-            .CLKBWRCLK      (gbe_txclk2),                           // WRCLK    and ensure safe setup time for ADR when EN is Enabled!
+            .CLKBWRCLK      (wrclk),                           // WRCLK    and ensure safe setup time for ADR when EN is Enabled!
 
             // data in
-            .DIADI          (data_iram[31:0]),  // DI low 32-bit
-            .DIBDI          (data_iram[63:32]), // DI high 32-bit
+            .DIADI          (data_in0),  // DI low 32-bit
+            .DIBDI          (data_in1), // DI high 32-bit
 
             // data out
             .DOADO          (data_oram[ibram][31:0]),               // DO low 32-bit
@@ -632,7 +663,7 @@ module CSC_GEM_Emulator (
 
             // in port read enable
             .ENARDEN        (bram_rd_en[ibram]),                    // RDEN
-            .ENBWREN        (cycle4 & (bk_adr==ibram) & gtx_ready), // WREN  Alfke: "WE off" is not sufficient to protect
+            .ENBWREN        (bram_wr_en[ibram]), // WREN  Alfke: "WE off" is not sufficient to protect
 
             // bit errors
             .SBITERR        (sbiterr_oram[ibram]),
@@ -750,7 +781,7 @@ module CSC_GEM_Emulator (
         else if (cmd_code[15:12] == 4'hF) event_enable <= 1'b0;           // stop dump on any non-FEFE command: F0F0, F3F3, F7F7, FDFD...
         else                              event_enable <= event_enable;
 
-        // control rdclk source
+        // control rdclk and wrclk source
         //---------------------------------------------
         sel_rdclk <= (cmd_code==CMD_READ); // JGhere, maybe this will change the clock before the Read is finished, so delay it?
     end
@@ -844,6 +875,7 @@ module CSC_GEM_Emulator (
 //----------------------------------------------------------------------------------------------------------------------
 // GbE Tx to PC
 //----------------------------------------------------------------------------------------------------------------------
+
 
     always @(posedge gbe_txclk2 or posedge gtx_reset) // everything using GbE USR clock w/GTX_Reset
     begin
@@ -993,6 +1025,8 @@ module CSC_GEM_Emulator (
 // GbE Rx from PC
 //----------------------------------------------------------------------------------------------------------------------
 
+    reg start_pack = 0;
+
     always @(posedge gbe_txclk2 or posedge gtx_reset) // everything using GbE USR clock w/GTX_Reset
     begin
         if (gtx_reset) begin
@@ -1021,8 +1055,6 @@ module CSC_GEM_Emulator (
             cmd_code <=  end_of_packet && |cmd_code ? 16'h0000 : cmd_code;
 
             if (startup_done && rxdv) begin // get command from first 1-2 data bytes of packet
-
-
                 // GbE Rx Counter
                 // -----------------------------------------------------
                 if (gbe_rxcount == 16'd4407) begin     // tuned to handle weird .5 sec rxdv case after Reset.
@@ -1033,17 +1065,12 @@ module CSC_GEM_Emulator (
                 else begin
                     gbe_rxcount <= gbe_rxcount + 1'b1;
                 end
-
-
                 // rx_adr to block ram zeroed if we are not updating. Does this even matter ?
                 if      (cmd_code != CMD_WRITE) rx_adr_r <= 11'h000;
                 else if (cycle4)                rx_adr_r <= rx_adr;
-
-
                 // timeout reset
                 //-----------------------------------------------------
                 rx_adr <= (rx_timeout) ? 11'h0 : rx_adr;
-
                 // Break down GbE packet Rx from the PC:
                 //-----------------------------------------------------
                 if ( rx_timeout | event_done_r | dump_done_r )
@@ -1075,10 +1102,11 @@ module CSC_GEM_Emulator (
                 begin
                     dump_loop_i <= (cmd_code==CMD_DUMP) ? (gbe_rxdat[3:0]==4'hC) : 1'b0;
                     nbx_i       <= (cmd_code==CMD_SEND) ? (gbe_rxdat[7:0])       : 8'b0;
-                    bk_adr      <= (cmd_code==CMD_READ || cmd_code==CMD_WRITE) && (gbe_rxdat[11:8]==4'h0) ? gbe_rxdat[11:0] : 12'b0;
+                    bk_adr      <= (cmd_code==CMD_READ || cmd_code==CMD_WRITE || cmd_code==CMD_PACK) && (gbe_rxdat[11:8]==4'h0) ? gbe_rxdat[11:0] : 12'b0;
+                    start_pack  <= cmd_code == CMD_PACK;
+                    sel_wrclk <= (cmd_code==CMD_WRITE) ? 1'b1 : 1'b0;
                     data_iram[15:0] <= 16'hdddd;
                 end
-
 
                 // parse_data
                 //------------------------------------------------------------------------------------------
@@ -1086,6 +1114,7 @@ module CSC_GEM_Emulator (
                 begin
                     // loading block ram flag
                     loading_bram <= (rx_adr==MX_RX_ADR) ? 1'b0 : (gbe_rxcount==16'h0005) ? 1'b1 : loading_bram;
+
 
                     // produces a synchronization pulse when the last word of a ram block is being read
                     cycle4 <= loading_bram && (iram_word==2'h3); // cannot begin before rx_count=6
@@ -1107,6 +1136,8 @@ module CSC_GEM_Emulator (
                     cycle4 <= 0;
                 end // else: !if(gbe_rxcount == 3 or 4, or cmd=f7f7)
 
+                if(start_pack) start_pack <= 1'b0;
+
             end  // if (startup_done & rxdv & correct switch state)
 
             else  begin  // if (rxdv == 0) or !startup_done
@@ -1117,6 +1148,61 @@ module CSC_GEM_Emulator (
             end
         end // else: !if(gtx_reset)
     end // @(posedge gbe_txclk2 or posedge gtx_reset)
+
+//----------------------------------------------------------------------------------------------------------------------
+// pack state machine
+//----------------------------------------------------------------------------------------------------------------------
+
+    reg [1:0] pack_state = 2'd0;
+
+    wire state3;
+
+    assign state3 = (pack_state == 2'd2);
+
+    always @(posedge snap_clk2) begin
+        case (pack_state)
+            2'd0: begin
+                if(start_pack)
+                begin
+                    pack_state <= 2'd1;
+                    pack_rd <= 1'b1;
+                    packing <= 1'b1;
+                    chm_fb <= 1'b0;
+                    chm_adr <= bk_adr;
+                end
+            end
+            2'd1: begin
+                pack_rd_adr <= pack_rd_adr + 1;
+                pack_delay <= pack_delay + 1;
+                if(pack_delay == 4'd13) begin
+                    pack_wr <= 1'b1;
+                    pack_state <= 2'd2;
+                    pack_delay <= 4'b0;
+                end
+            end
+            2'd2: begin
+                pack_rd_adr <= pack_rd_adr + 1;
+                pack_wr_adr <= pack_wr_adr + 1;
+                if(pack_wr_adr == 16'd2047) begin
+                    pack_state <= 2'd3;
+                    pack_wr_adr <= 16'd0;
+                    chm_fb <= 1'b1;
+                end
+            end
+            2'd3: begin
+                pack_rd_adr <= pack_rd_adr + 1;
+                pack_wr_adr <= pack_wr_adr + 1;
+                if(pack_wr_adr == 16'd2047) begin
+                    pack_rd <= 1'b0;
+                    pack_wr <= 1'b0;
+                    pack_state <= 2'd0;
+                    pack_rd_adr <= 16'd0;
+                    pack_wr_adr <= 16'd0;
+                    packing <= 1'b0;
+                end
+            end
+        endcase
+    end
 
 //----------------------------------------------------------------------------------------------------------------------
 // transmit data multiplexer
@@ -1276,9 +1362,9 @@ module CSC_GEM_Emulator (
         .cluster7 (cluster[7])
     );
 
-    assign gem_packet0 = {cluster[3], cluster[2], cluster[1], cluster[0]};
-    assign gem_packet1 = {cluster[7], cluster[6], cluster[5], cluster[4]};
-    wire gem_sump = (|gem_packet0) | (|gem_packet1);
+    assign gem_packet0 = {cluster[0], cluster[1], cluster[2], cluster[3]};
+    assign gem_packet1 = {cluster[4], cluster[5], cluster[6], cluster[7]};
+    wire gem_sump = (|gem_packet1);
 
 //----------------------------------------------------------------------------------------------------------------------
 // qpll lock lost latch
@@ -1601,10 +1687,10 @@ module CSC_GEM_Emulator (
 // LED Assignments
 //----------------------------------------------------------------------------------------------------------------------
 
-x_flashsm #(22) led0 (.trigger(loading_bram),         .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_led));
+x_flashsm #(22) led0 (.trigger(valid_gem0),         .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_led));
 x_flashsm #(22) led1 (.trigger(cmd_code==CMD_DUMP),   .hold(1'b0), .clock(gbe_txclk2), .out(dump_led));
 x_flashsm #(22) led2 (.trigger(cmd_code==CMD_WRITE),  .hold(1'b0), .clock(gbe_txclk2), .out(cmd_code_led));
-x_flashsm #(22) led3 (.trigger(gbe_rxdat==CMD_WRITE), .hold(1'b0), .clock(gbe_txclk2), .out(rxdat_led));
+x_flashsm #(22) led3 (.trigger(state3), .hold(1'b0), .clock(gbe_txclk2), .out(rxdat_led));
 x_flashsm #(22) led4 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_adr<MXBRAMS && gbe_rxcount==16'h5), .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_led2));
 x_flashsm #(22) led5 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_adr<MXBRAMS && rx_adr==11'h7ff), .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_done));
 
@@ -1627,7 +1713,7 @@ x_flashsm #(22) led5 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_ad
         led_hi[11] = ~ (1'b0 ^ rxdat_led         ); //!rd_ptr[8]              ; // ~6.25 usec  // gtx_ready                ; // 1
         led_hi[12] = ~ (1'b0 ^ loading_bram_led2 ); //!dump_enable_rr         ; // 12.5 usec   //
         led_hi[13] = ~ (1'b0 ^ loading_bram_done ); //!dump_enable_r          ; // 12.5 usec   // (locked & lhc_locked)    ; // 1
-        led_hi[14] = ~ (1'b0 ^ 1'b0              ); //!dump_enable            ; // 12.5 usec
+        led_hi[14] = ~ (1'b0 ^ packing              ); //!dump_enable            ; // 12.5 usec
         led_hi[15] = ~ (1'b0 ^ loading_bram_led  ); //!dump_done              ; // 50ns
 
         test_led[9]   = lhc_ck;
