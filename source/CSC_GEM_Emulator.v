@@ -120,6 +120,7 @@ module CSC_GEM_Emulator (
     parameter CMD_WRITE   = 16'hf7f7; // writes to block ram
     parameter CMD_READ    = 16'hf3f3; // reads from block ram
     parameter CMD_DUMP    = 16'hfdfd; // dump block ram contents
+    parameter CMD_PACK    = 16'hf1f1; // fill block ram through cluster packer
 
     // not used in sw
     parameter CMD_SEND    = 16'hfefe;
