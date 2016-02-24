@@ -187,6 +187,7 @@ module CSC_GEM_Emulator (
     reg [3:0]  pack_delay = 0;
     reg pack_rd = 0;
     reg pack_wr = 0;
+    reg packing = 0;
 
     // Add-ons for Ben dCFEB testing:
     //-------------------------------
@@ -602,6 +603,10 @@ module CSC_GEM_Emulator (
     assign rd_addr = (sel_rdclk) ? tx_adr[10:2] : rd_ptr[8:0];
     assign wr_addr = (pack_wr) ? pack_wr_adr[10:2] : rx_adr_r[10:2];
 
+    wire data_in[63:0];
+
+    assign data_in = packing ? {8'b0,gem_packet0} : data_iram;
+
     wire bram_rd_en[MXBRAMS-1:0];
     wire bram_wr_en[MXBRAMS-1:0];
 
@@ -640,8 +645,8 @@ module CSC_GEM_Emulator (
             .CLKBWRCLK      (wrclk),                           // WRCLK    and ensure safe setup time for ADR when EN is Enabled!
 
             // data in
-            .DIADI          (data_iram[31:0]),  // DI low 32-bit
-            .DIBDI          (data_iram[63:32]), // DI high 32-bit
+            .DIADI          (data_in[31:0]),  // DI low 32-bit
+            .DIBDI          (data_in[63:32]), // DI high 32-bit
 
             // data out
             .DOADO          (data_oram[ibram][31:0]),               // DO low 32-bit
@@ -1147,6 +1152,7 @@ module CSC_GEM_Emulator (
                 begin
                     pack_state <= 2'h1;
                     pack_rd <= 1'b1;
+                    packing <= 1'b1;
                 end
             end
             3'h1: begin
@@ -1167,6 +1173,7 @@ module CSC_GEM_Emulator (
                     pack_state <= 4'h0;
                     pack_rd_adr <= 16'd0;
                     pack_wr_adr <= 16'd0;
+                    packing <= 1'b0;
                 end
             end
             3'h3: begin
@@ -1335,7 +1342,7 @@ module CSC_GEM_Emulator (
 
     assign gem_packet0 = {cluster[3], cluster[2], cluster[1], cluster[0]};
     assign gem_packet1 = {cluster[7], cluster[6], cluster[5], cluster[4]};
-    wire gem_sump = (|gem_packet0) | (|gem_packet1);
+    wire gem_sump = (|gem_packet1);
 
 //----------------------------------------------------------------------------------------------------------------------
 // qpll lock lost latch
