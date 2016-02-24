@@ -603,9 +603,11 @@ module CSC_GEM_Emulator (
     assign rd_addr = (sel_rdclk) ? tx_adr[10:2] : rd_ptr[8:0];
     assign wr_addr = (pack_wr) ? pack_wr_adr[10:2] : rx_adr_r[10:2];
 
-    wire data_in[63:0];
+    wire data_in0[31:0];
+    wire data_in1[31:0];
 
-    assign data_in = packing ? {8'b0,gem_packet0} : data_iram;
+    assign data_in0 = packing ? gem_packet0[31:0] : data_iram[31:0];
+    assign data_in1 = packing ? {8'b0,gem_packet0[55:32]} : data_iram[63:32];
 
     wire bram_rd_en[MXBRAMS-1:0];
     wire bram_wr_en[MXBRAMS-1:0];
@@ -645,8 +647,8 @@ module CSC_GEM_Emulator (
             .CLKBWRCLK      (wrclk),                           // WRCLK    and ensure safe setup time for ADR when EN is Enabled!
 
             // data in
-            .DIADI          (data_in[31:0]),  // DI low 32-bit
-            .DIBDI          (data_in[63:32]), // DI high 32-bit
+            .DIADI          (data_in0),  // DI low 32-bit
+            .DIBDI          (data_in1), // DI high 32-bit
 
             // data out
             .DOADO          (data_oram[ibram][31:0]),               // DO low 32-bit
