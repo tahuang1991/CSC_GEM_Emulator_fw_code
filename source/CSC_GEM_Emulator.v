@@ -267,7 +267,6 @@ module CSC_GEM_Emulator (
 
     wire [63:0] data_oram [MXBRAMS-1:0];
     reg  [63:0] data_iram;
-    reg  [63:0] wren_iram;
 
     reg cycle4;       // use this to toggle bram WRITE every 4th GbE word during cmd=f7f7
     reg loading_bram; // was called cmdf7f7
@@ -604,13 +603,14 @@ module CSC_GEM_Emulator (
     assign wr_addr = (pack_wr) ? pack_wr_adr[10:2] : rx_adr_r[10:2];
 
     wire bram_rd_en[MXBRAMS-1:0];
+    wire bram_wr_en[MXBRAMS-1:0];
 
     genvar ibram;
     generate
     for (ibram=12'h000; ibram<MXBRAMS; ibram=ibram+1'b1) begin:bramgen
 
         assign bram_rd_en[ibram] = send_event || ((cmd_code==CMD_READ) & (bk_adr==ibram) & gtx_ready) || (pack_rd && ibram > 7);
-        assign wren_iram[iram] = (cycle4 & (bk_adr==ibram) & gtx_ready) || (pack_wr && ibram == 0);
+        assign bram_wr_en[ibram] = (cycle4 & (bk_adr==ibram) & gtx_ready) || (pack_wr && ibram == 0);
 
         RAMB36E1 #(
             .DOA_REG        (0),         // Optional output register ( 0 or 1)
@@ -649,7 +649,7 @@ module CSC_GEM_Emulator (
 
             // in port read enable
             .ENARDEN        (bram_rd_en[ibram]),                    // RDEN
-            .ENBWREN        (wren_iram[iram]), // WREN  Alfke: "WE off" is not sufficient to protect
+            .ENBWREN        (bram_wr_en[iram]), // WREN  Alfke: "WE off" is not sufficient to protect
 
             // bit errors
             .SBITERR        (sbiterr_oram[ibram]),
@@ -1171,6 +1171,7 @@ module CSC_GEM_Emulator (
             3'h3: begin
                 pack_state <= 3'h0;
             end
+        endcase
     end
 
 //----------------------------------------------------------------------------------------------------------------------
