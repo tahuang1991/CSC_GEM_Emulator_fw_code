@@ -1107,7 +1107,7 @@ module CSC_GEM_Emulator (
 
                 // parse_data
                 //------------------------------------------------------------------------------------------
-                else if (gbe_rxcount > 16'd4 && cmd_code==CMD_WRITE && bk_adr<MXBRAMS)
+                else if (gbe_rxcount > 16'd4 && (cmd_code==CMD_WRITE||cmd_code==CMD_PACK) && bk_adr<MXBRAMS)
                 begin
                     // loading block ram flag
                     loading_bram <= (rx_adr==MX_RX_ADR) ? 1'b0 : (gbe_rxcount==16'h0005) ? 1'b1 : loading_bram;
