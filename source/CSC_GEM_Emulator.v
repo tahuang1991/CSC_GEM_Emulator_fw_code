@@ -1147,6 +1147,10 @@ module CSC_GEM_Emulator (
 
     reg [1:0] pack_state = 2'b0;
 
+    wire state3 = 0;
+
+    assign state3 = (pack_state == 3'h2);
+
     always @(posedge snap_clk2) begin
         case (pack_state)
             4'h0: begin
@@ -1670,7 +1674,7 @@ module CSC_GEM_Emulator (
 x_flashsm #(22) led0 (.trigger(loading_bram),         .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_led));
 x_flashsm #(22) led1 (.trigger(cmd_code==CMD_DUMP),   .hold(1'b0), .clock(gbe_txclk2), .out(dump_led));
 x_flashsm #(22) led2 (.trigger(cmd_code==CMD_WRITE),  .hold(1'b0), .clock(gbe_txclk2), .out(cmd_code_led));
-x_flashsm #(22) led3 (.trigger(gbe_rxdat==CMD_WRITE), .hold(1'b0), .clock(gbe_txclk2), .out(rxdat_led));
+x_flashsm #(22) led3 (.trigger(state3), .hold(1'b0), .clock(gbe_txclk2), .out(rxdat_led));
 x_flashsm #(22) led4 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_adr<MXBRAMS && gbe_rxcount==16'h5), .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_led2));
 x_flashsm #(22) led5 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_adr<MXBRAMS && rx_adr==11'h7ff), .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_done));
 
