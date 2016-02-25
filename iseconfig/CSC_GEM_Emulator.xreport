@@ -1,12 +1,12 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <report-views version="2.0" >
  <header>
-  <DateModified>2015-11-03T16:27:16</DateModified>
+  <DateModified>2016-02-25T10:31:30</DateModified>
   <ModuleName>CSC_GEM_Emulator</ModuleName>
   <SummaryTimeStamp>2015-10-28T13:54:28</SummaryTimeStamp>
-  <ImplementationReportsDirectory>C:/Users/Andrew/Dropbox/CMS/GEM/emulator_fw/work\</ImplementationReportsDirectory>
+  <ImplementationReportsDirectory>/home/andrew/Dropbox/CMS/GEM/emulator_fw/work/</ImplementationReportsDirectory>
   <DateInitialized>2015-10-28T13:54:39</DateInitialized>
-  <SavedFilePath>C:/Users/Andrew/Dropbox/CMS/GEM/emulator_fw/iseconfig/CSC_GEM_Emulator.xreport</SavedFilePath>
+  <SavedFilePath>/home/andrew/Dropbox/CMS/GEM/emulator_fw/iseconfig/CSC_GEM_Emulator.xreport</SavedFilePath>
   <EnableMessageFiltering>false</EnableMessageFiltering>
  </header>
  <body>

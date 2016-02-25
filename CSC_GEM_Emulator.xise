@@ -25,7 +25,7 @@
     </file>
     <file xil_pn:name="source/tmb_fiber_out.v" xil_pn:type="FILE_VERILOG">
       <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="Implementation" xil_pn:seqID="8"/>
+      <association xil_pn:name="Implementation" xil_pn:seqID="9"/>
     </file>
     <file xil_pn:name="source/comp_fiber_in.v" xil_pn:type="FILE_VERILOG">
       <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
@@ -86,10 +86,6 @@
       <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
       <association xil_pn:name="Implementation" xil_pn:seqID="13"/>
     </file>
-    <file xil_pn:name="source/OH_modules/srl16e_bbl.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="Implementation" xil_pn:seqID="0"/>
-    </file>
     <file xil_pn:name="source/bufg_div8clk.v" xil_pn:type="FILE_VERILOG">
       <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
       <association xil_pn:name="Implementation" xil_pn:seqID="14"/>
@@ -118,116 +114,13 @@
       <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
       <association xil_pn:name="Implementation" xil_pn:seqID="3"/>
     </file>
-    <file xil_pn:name="source/OH_modules/x_flashsm.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="Implementation" xil_pn:seqID="9"/>
-    </file>
     <file xil_pn:name="source/gem_fiber_out.v" xil_pn:type="FILE_VERILOG">
       <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
       <association xil_pn:name="Implementation" xil_pn:seqID="11"/>
     </file>
-    <file xil_pn:name="source/OH_modules/simulation/csc_hit_packer_tb.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="PostMapSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="PostRouteSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="PostTranslateSimulation" xil_pn:seqID="167"/>
-    </file>
-    <file xil_pn:name="source/OH_modules/simulation/sort8of16_tb.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="PostMapSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="PostRouteSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="PostTranslateSimulation" xil_pn:seqID="187"/>
-    </file>
-    <file xil_pn:name="source/OH_modules/csc_data_packer.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="Implementation" xil_pn:seqID="0"/>
-    </file>
-    <file xil_pn:name="source/OH_modules/priority6.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="Implementation" xil_pn:seqID="0"/>
-    </file>
-    <file xil_pn:name="source/OH_modules/priority6_tb.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="PostMapSimulation" xil_pn:seqID="2"/>
-      <association xil_pn:name="PostRouteSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="PostTranslateSimulation" xil_pn:seqID="162"/>
-    </file>
-    <file xil_pn:name="source/OH_modules/priority32.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="Implementation" xil_pn:seqID="0"/>
-    </file>
-    <file xil_pn:name="source/OH_modules/priority32_tb.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="PostMapSimulation" xil_pn:seqID="105"/>
-      <association xil_pn:name="PostRouteSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="PostTranslateSimulation" xil_pn:seqID="105"/>
-    </file>
-    <file xil_pn:name="source/OH_modules/priority192.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="Implementation" xil_pn:seqID="0"/>
-    </file>
-    <file xil_pn:name="source/OH_modules/simulation/priority192_tb.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="PostMapSimulation" xil_pn:seqID="147"/>
-      <association xil_pn:name="PostRouteSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="PostTranslateSimulation" xil_pn:seqID="147"/>
-    </file>
-    <file xil_pn:name="source/OH_modules/priority8.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="1"/>
-      <association xil_pn:name="Implementation" xil_pn:seqID="0"/>
-    </file>
-    <file xil_pn:name="source/OH_modules/priority8_tb.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="PostMapSimulation" xil_pn:seqID="181"/>
-      <association xil_pn:name="PostRouteSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="PostTranslateSimulation" xil_pn:seqID="181"/>
-    </file>
-    <file xil_pn:name="source/OH_modules/priority1536.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="Implementation" xil_pn:seqID="0"/>
-    </file>
-    <file xil_pn:name="source/OH_modules/priority1536_tb.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="PostMapSimulation" xil_pn:seqID="219"/>
-      <association xil_pn:name="PostRouteSimulation" xil_pn:seqID="2"/>
-      <association xil_pn:name="PostTranslateSimulation" xil_pn:seqID="219"/>
-    </file>
-    <file xil_pn:name="source/OH_modules/priority1536_instance.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="Implementation" xil_pn:seqID="0"/>
-    </file>
-    <file xil_pn:name="source/OH_modules/first8of1536.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="Implementation" xil_pn:seqID="0"/>
-    </file>
-    <file xil_pn:name="test_priority192.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="PostMapSimulation" xil_pn:seqID="212"/>
-      <association xil_pn:name="PostRouteSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="PostTranslateSimulation" xil_pn:seqID="212"/>
-    </file>
-    <file xil_pn:name="priority192.ucf" xil_pn:type="FILE_UCF">
-      <association xil_pn:name="Implementation" xil_pn:seqID="0"/>
-    </file>
-    <file xil_pn:name="priority1536.ucf" xil_pn:type="FILE_UCF">
-      <association xil_pn:name="Implementation" xil_pn:seqID="0"/>
-    </file>
-    <file xil_pn:name="source/OH_modules/8xpriority1536.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="Implementation" xil_pn:seqID="0"/>
-    </file>
-    <file xil_pn:name="source/OH_modules/first8of1536_instance.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
-      <association xil_pn:name="Implementation" xil_pn:seqID="0"/>
-    </file>
-    <file xil_pn:name="first8of1536.ucf" xil_pn:type="FILE_UCF">
-      <association xil_pn:name="Implementation" xil_pn:seqID="0"/>
-    </file>
-    <file xil_pn:name="testfix.v" xil_pn:type="FILE_VERILOG">
-      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="2"/>
-      <association xil_pn:name="PostMapSimulation" xil_pn:seqID="275"/>
-      <association xil_pn:name="PostRouteSimulation" xil_pn:seqID="275"/>
-      <association xil_pn:name="PostTranslateSimulation" xil_pn:seqID="275"/>
+    <file xil_pn:name="source/x_flashsm.v" xil_pn:type="FILE_VERILOG">
+      <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="101"/>
+      <association xil_pn:name="Implementation" xil_pn:seqID="8"/>
     </file>
   </files>
 
@@ -562,9 +455,6 @@
 
   <bindings>
     <binding xil_pn:location="/CSC_GEM_Emulator" xil_pn:name="source/gem_test_ucf_simlified.ucf"/>
-    <binding xil_pn:location="/priority192" xil_pn:name="priority192.ucf"/>
-    <binding xil_pn:location="/priority1536_instance" xil_pn:name="priority1536.ucf"/>
-    <binding xil_pn:location="/first8of1536_instance" xil_pn:name="first8of1536.ucf"/>
   </bindings>
 
   <libraries/>
@@ -576,7 +466,6 @@
     <!-- Do not hand-edit this section, as it will be overwritten when the    -->
     <!-- project is analyzed based on files automatically identified as       -->
     <!-- include files.                                                       -->
-    <file xil_pn:name="source/OH_modules/global_parameters.v" xil_pn:type="FILE_VERILOG"/>
   </autoManagedFiles>
 
 </project>
