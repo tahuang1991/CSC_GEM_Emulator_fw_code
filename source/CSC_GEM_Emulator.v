@@ -1107,12 +1107,11 @@ module CSC_GEM_Emulator (
 
                 // parse_data
                 //------------------------------------------------------------------------------------------
-                else if (gbe_rxcount > 16'd4 && (cmd_code==CMD_WRITE||cmd_code==CMD_PACK) && bk_adr<MXBRAMS)
+                else if (gbe_rxcount > 16'd4 && cmd_code==CMD_WRITE && bk_adr<MXBRAMS)
                 begin
                     // loading block ram flag
                     loading_bram <= (rx_adr==MX_RX_ADR) ? 1'b0 : (gbe_rxcount==16'h0005) ? 1'b1 : loading_bram;
 
-                    start_pack <= 1'b0;
 
                     // produces a synchronization pulse when the last word of a ram block is being read
                     cycle4 <= loading_bram && (iram_word==2'h3); // cannot begin before rx_count=6
@@ -1133,6 +1132,8 @@ module CSC_GEM_Emulator (
                 else begin
                     cycle4 <= 0;
                 end // else: !if(gbe_rxcount == 3 or 4, or cmd=f7f7)
+
+                if(start_pack) start_pack <= 1'b0;
 
             end  // if (startup_done & rxdv & correct switch state)
 
