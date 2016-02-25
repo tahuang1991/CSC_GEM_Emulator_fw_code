@@ -1147,7 +1147,7 @@ module CSC_GEM_Emulator (
 
     reg [1:0] pack_state = 2'b0;
 
-    wire state3 = 0;
+    wire state3;
 
     assign state3 = (pack_state == 3'h2);
 
