@@ -660,7 +660,7 @@ module CSC_GEM_Emulator (
 
             // in port read enable
             .ENARDEN        (bram_rd_en[ibram]),                    // RDEN
-            .ENBWREN        (bram_wr_en[iram]), // WREN  Alfke: "WE off" is not sufficient to protect
+            .ENBWREN        (bram_wr_en[ibram]), // WREN  Alfke: "WE off" is not sufficient to protect
 
             // bit errors
             .SBITERR        (sbiterr_oram[ibram]),
