@@ -1149,45 +1149,45 @@ module CSC_GEM_Emulator (
 // pack state machine
 //----------------------------------------------------------------------------------------------------------------------
 
-    reg [1:0] pack_state = 2'b0;
+    reg [1:0] pack_state = 2'd0;
 
     wire state3;
 
-    assign state3 = (pack_state == 3'h2);
+    assign state3 = (pack_state == 2'd2);
 
     always @(posedge snap_clk2) begin
         case (pack_state)
-            4'h0: begin
+            2'd0: begin
                 if(start_pack)
                 begin
-                    pack_state <= 2'h1;
+                    pack_state <= 2'd1;
                     pack_rd <= 1'b1;
                     packing <= 1'b1;
                 end
             end
-            3'h1: begin
+            2'd1: begin
                 pack_rd_adr <= pack_rd_adr + 1;
                 pack_delay <= pack_delay + 1;
                 if(pack_delay == 4'd13) begin
                     pack_wr <= 1'b1;
-                    pack_state <= 2'h2;
+                    pack_state <= 2'd2;
                     pack_delay <= 4'b0;
                 end
             end
-            3'h2: begin
+            2'd2: begin
                 pack_rd_adr <= pack_rd_adr + 1;
                 pack_wr_adr <= pack_wr_adr + 1;
                 if(pack_wr_adr == 16'd2047) begin
                     pack_rd <= 1'b0;
                     pack_wr <= 1'b0;
-                    pack_state <= 4'h0;
+                    pack_state <= 2'd0;
                     pack_rd_adr <= 16'd0;
                     pack_wr_adr <= 16'd0;
                     packing <= 1'b0;
                 end
             end
-            3'h3: begin
-                pack_state <= 3'h0;
+            2'd3: begin
+                pack_state <= 2'd0;
             end
         endcase
     end
