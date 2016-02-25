@@ -606,6 +606,10 @@ module CSC_GEM_Emulator (
     wire [31:0] data_in0;
     wire [31:0] data_in1;
 
+    wire valid_gem0;
+
+    assign valid_gem0 = ~&{gem_packet0[10:9],gem_packet0[24:23]};
+
     assign data_in0 = packing ? gem_packet0[31:0] : data_iram[31:0];
     assign data_in1 = packing ? {8'b0,gem_packet0[55:32]} : data_iram[63:32];
 
@@ -1671,7 +1675,7 @@ module CSC_GEM_Emulator (
 // LED Assignments
 //----------------------------------------------------------------------------------------------------------------------
 
-x_flashsm #(22) led0 (.trigger(loading_bram),         .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_led));
+x_flashsm #(22) led0 (.trigger(valid_gem0),         .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_led));
 x_flashsm #(22) led1 (.trigger(cmd_code==CMD_DUMP),   .hold(1'b0), .clock(gbe_txclk2), .out(dump_led));
 x_flashsm #(22) led2 (.trigger(cmd_code==CMD_WRITE),  .hold(1'b0), .clock(gbe_txclk2), .out(cmd_code_led));
 x_flashsm #(22) led3 (.trigger(state3), .hold(1'b0), .clock(gbe_txclk2), .out(rxdat_led));
