@@ -1701,7 +1701,7 @@ x_flashsm #(22) led5 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_ad
         led_hi[11] = ~ (1'b0 ^ rxdat_led         ); //!rd_ptr[8]              ; // ~6.25 usec  // gtx_ready                ; // 1
         led_hi[12] = ~ (1'b0 ^ loading_bram_led2 ); //!dump_enable_rr         ; // 12.5 usec   //
         led_hi[13] = ~ (1'b0 ^ loading_bram_done ); //!dump_enable_r          ; // 12.5 usec   // (locked & lhc_locked)    ; // 1
-        led_hi[14] = ~ (1'b0 ^ 1'b0              ); //!dump_enable            ; // 12.5 usec
+        led_hi[14] = ~ (1'b0 ^ packing              ); //!dump_enable            ; // 12.5 usec
         led_hi[15] = ~ (1'b0 ^ loading_bram_led  ); //!dump_done              ; // 50ns
 
         test_led[9]   = lhc_ck;
