@@ -611,7 +611,7 @@ module CSC_GEM_Emulator (
     assign valid_gem0 = ~&{gem_packet0[10:9],gem_packet0[24:23]};
 
     assign data_in0 = packing ? gem_packet0[31:0] : data_iram[31:0];
-    assign data_in1 = packing ? {8'b0,gem_packet0[55:32]} : data_iram[63:32];
+    assign data_in1 = packing ? {gem_packet0[55:32],8'b0} : data_iram[63:32];
 
     wire bram_rd_en[MXBRAMS-1:0];
     wire bram_wr_en[MXBRAMS-1:0];
@@ -1351,8 +1351,8 @@ module CSC_GEM_Emulator (
         .cluster7 (cluster[7])
     );
 
-    assign gem_packet0 = {cluster[3], cluster[2], cluster[1], cluster[0]};
-    assign gem_packet1 = {cluster[7], cluster[6], cluster[5], cluster[4]};
+    assign gem_packet0 = {cluster[0], cluster[1], cluster[2], cluster[3]};
+    assign gem_packet1 = {cluster[4], cluster[5], cluster[6], cluster[7]};
     wire gem_sump = (|gem_packet1);
 
 //----------------------------------------------------------------------------------------------------------------------
