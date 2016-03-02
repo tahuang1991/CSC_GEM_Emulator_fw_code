@@ -482,7 +482,7 @@ module CSC_GEM_Emulator (
     end // close rdclk
 
 
-    wire [55:0] gem_data_mux = sw[8] ? 56'hfeedadeadabeef : 56'h00000000000000;
+    wire [55:0] gem_data_mux = sw[8] ? 56'hffffffffffffff : 56'h00000000000000;
 
     wire [55:0] gem_packet0;
     wire [55:0] gem_packet1;
