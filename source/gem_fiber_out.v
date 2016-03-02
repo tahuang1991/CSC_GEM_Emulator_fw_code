@@ -212,20 +212,23 @@ OBUF  #(.DRIVE(12),.IOSTANDARD("DEFAULT"),.SLEW("SLOW")) OBUF_TRG_TDIS (.O(TRG_T
 		//if(!rst_tx && (trgcnt==8'h00)) lt_trg  = 1'b1;
     //else                           lt_trg  = 1'b0;
 
-    if (GEM_OVERFLOW)
-      frm_sep = 8'hFC;
-    else begin
-      case (frm_sep_cnt)
-        3'd0: frm_sep = 8'hBC;
-        3'd1: frm_sep = 8'hBC;
-        3'd2: frm_sep = 8'hF7;
-        3'd3: frm_sep = 8'hF7;
-        3'd4: frm_sep = 8'hFB;
-        3'd5: frm_sep = 8'hFB;
-        3'd6: frm_sep = 8'hFD;
-        3'd7: frm_sep = 8'hFD;
-      endcase
-    end
+
+    frm_sep = 8'hBC;
+
+    // if (GEM_OVERFLOW)
+    //   frm_sep = 8'hFC;
+    // else begin
+    //   case (frm_sep_cnt)
+    //     3'd0: frm_sep = 8'hBC;
+    //     3'd1: frm_sep = 8'hBC;
+    //     3'd2: frm_sep = 8'hF7;
+    //     3'd3: frm_sep = 8'hF7;
+    //     3'd4: frm_sep = 8'hFB;
+    //     3'd5: frm_sep = 8'hFB;
+    //     3'd6: frm_sep = 8'hFD;
+    //     3'd7: frm_sep = 8'hFD;
+    //   endcase
+    // end
 	end
 
 
