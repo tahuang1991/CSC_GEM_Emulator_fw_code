@@ -501,14 +501,15 @@ module CSC_GEM_Emulator (
     reg [55:0] gem_fiber_out [3:0];
     reg [47:0] cfeb_fiber_out[3:0];
     always @(negedge ck40) begin  // 80 MHz derived from GTX_TxPLL
-         gem_fiber_out[0][55:0] <= (send_event) ? data_oram[0][55:0] : 56'hffffffffffffff;
+        gem_fiber_out[0][55:0]  <= (send_event) ? data_oram[0][55:0] : 56'hffffffffffffff;
+        gem_fiber_out[1][55:0]  <= (send_event) ? data_oram[5][55:0] : 56'hffffffffffffff;
+        gem_fiber_out[2][55:0]  <= (send_event) ? data_oram[6][55:0] : 56'hffffffffffffff;
+        gem_fiber_out[3][55:0]  <= (send_event) ? data_oram[7][55:0] : 56'hffffffffffffff;
+
         cfeb_fiber_out[0][47:0] <= (send_event) ? data_oram[1][47:0] : 48'h000000000000;
         cfeb_fiber_out[1][47:0] <= (send_event) ? data_oram[2][47:0] : 48'h000000000000;
         cfeb_fiber_out[2][47:0] <= (send_event) ? data_oram[3][47:0] : 48'h000000000000;
         cfeb_fiber_out[3][47:0] <= (send_event) ? data_oram[4][47:0] : 48'h000000000000;
-        gem_fiber_out[1][55:0] <= (send_event) ? data_oram[5][55:0] : 56'hffffffffffffff;
-        gem_fiber_out[2][55:0] <= (send_event) ? data_oram[6][55:0] : 56'hffffffffffffff;
-        gem_fiber_out[3][55:0] <= (send_event) ? data_oram[7][55:0] : 56'hffffffffffffff;
     end // always
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -1388,21 +1389,19 @@ module CSC_GEM_Emulator (
     SRL16E #(.INIT(16'h7FFF)) SRL16TXPLL(.Q(txpll_rst), .A0(1'b1), .A1(1'b1), .A2(1'b1), .A3(1'b1), .CE (1'b1), .CLK(qpll_ck40), .D(1'b0));
 
     bufg_x2div2plus snap_mmcm (
-        .CLK_IN1              ( tx_clk_out    ) , // 80 MHz
-        .CLK_OUT1             ( tx_clk        ) , // 80 MHz
-        .CLK_OUT2             ( snap_clk2     ) , // 160 MHz
-        .CLK_OUT3             ( ck40          ) , // 40 MHz
-        .RESET                ( !ck160_locked ) ,
-        .LOCKED               ( lock40        ) ,
-        .CLK_OUT3BUF          ( ck40buf       ) // from Tx GTX PLL out clk
+        .CLK_IN1              (tx_clk_out    ), // 80 MHz
+        .CLK_OUT1             (tx_clk        ), // 80 MHz
+        .CLK_OUT2             (snap_clk2     ), // 160 MHz
+        .CLK_OUT3             (ck40          ), // 40 MHz
+        .RESET                (!ck160_locked ),
+        .LOCKED               (lock40        ),
+        .CLK_OUT3BUF          (ck40buf       )  // from Tx GTX PLL out clk
     );
 
 //----------------------------------------------------------------------------------------------------------------------
 // GEM + CFEB Fiber Outputs
 //----------------------------------------------------------------------------------------------------------------------
 
-    // JGhere, fiber Tx "from DCFEB" section:
-    //   was Snap12 module, not cfeb-tmb test code
     gem_fiber_out  gem0out   (
         .RST                 (reset),                 // Manual only
         .TRG_SIGDET          (),                      // from IPAD to IBUF.  N/A?
@@ -1421,12 +1420,12 @@ module CSC_GEM_Emulator (
         .TRG_GTXTXRST        (1'b0     ),             // maybe Manual "reset" only
         .TRG_TX_PLLRST       (txpll_rst),             // Tie LOW.
         .TRG_RST             (fiber_reset),           // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        .ENA_TEST_PAT        (1'b0),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-        //.ENA_TEST_PAT        (sw[8]),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        .ENA_TEST_PAT        (1'b0),                  // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+      //.ENA_TEST_PAT        (sw[8]),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
         .INJ_ERR             (ferr_f[0] & sw[8]),     // use my switch/PB combo logic for this, high-true? Pulse high once.
         .TRG_SD              (),                      // from IBUF, useless output. N/A
         .TRG_TXOUTCLK        (),                      // 80 MHz; This has to go to MCM to generate 160/80
-        .TRG_TX_PLL_LOCK     (),                      // inverse holds the MCM in Reset                                                                                                                                                                       // Tx GTX PLL Ref lock
+        .TRG_TX_PLL_LOCK     (),                      // inverse holds the MCM in Reset; Tx GTX PLL Ref lock
         .TRG_TXRESETDONE     (),                      // N/A
         .TX_SYNC_DONE        (),                      // not used in DCFEB tests
         .STRT_LTNCY          (tx_begin[0]),           // after every Reset, to TP for debug only  -- !sw7 ?
@@ -1434,146 +1433,6 @@ module CSC_GEM_Emulator (
         .MON_TX_SEL          (),                      // N/A
         .MON_TRG_TX_ISK      (),                      // N/A returns 4 bits
         .MON_TRG_TX_DATA     ()                       // N/A returns 32 bits
-    );
-
-    dcfeb_fiber_out  dcfeb1out (
-        .RST                 ( reset),               // Manual only
-        .TRG_SIGDET          (),                      // from IPAD to IBUF.  N/A?
-        .TRG_RX_N            ( ),                    // empty
-        .TRG_RX_P            ( ),                    // empty
-        .TRG_TDIS            ( ),                    // OBUF output, for what?  N/A?
-        .TRG_TX_N            ( txn[1]),              // pick a fiber
-        .TRG_TX_P            ( txp[1]),              // pick a fiber
-        .G1C                 ( cfeb_fiber_out[0][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-        .G2C                 ( cfeb_fiber_out[0][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
-        .G3C                 ( cfeb_fiber_out[0][23:16]), // but good for testing low-rate non-zero triad data:
-        .G4C                 ( cfeb_fiber_out[0][31:24]),
-        .G5C                 ( cfeb_fiber_out[0][39:32]),
-        .G6C                 ( cfeb_fiber_out[0][47:40]),
-        .TRG_TX_REFCLK       ( ck160),               // QPLL 160 from MGT clk
-        .TRG_TXUSRCLK        ( snap_clk2),           // get 160 from TXOUTCLK (times 2)
-        .TRG_CLK80           ( tx_clk),              // get 80 from TXOUTCLK
-        .TRG_GTXTXRST        ( txpll_rst),           // maybe Manual "reset" only
-        .TRG_TX_PLLRST       ( txpll_rst),           // Tie LOW.
-        .TRG_RST             ( fiber_reset),         // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        //.ENA_TEST_PAT        ( sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-        .ENA_TEST_PAT        (1'b0),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-        .INJ_ERR             ( ferr_f[1] & sw[8]),   // use my switch/PB combo logic for this, high-true? Pulse high once.
-        .TRG_SD              ( ),                    // from IBUF, useless output. N/A
-        .TRG_TXOUTCLK        ( tx_clk_out),          // 80 MHz; This has to go to MCM to generate 160/80
-        .TRG_TX_PLL_LOCK     ( ck160_locked),        // inverse holds the MCM in Reset                                                                                                                                                                       // Tx GTX PLL Ref lock
-        .TRG_TXRESETDONE     ( ),                    // N/A
-        .TX_SYNC_DONE        ( synced_snapt),        // not used in DCFEB tests
-        .STRT_LTNCY          ( tx_begin[1]),         // after every Reset, to TP for debug only  -- !sw7 ?
-        .LTNCY_TRIG          ( tx_fc[1]),            // bring out to TP.  Signals when TX sends "FC" (once every 128 BX).  Send raw to TP  --sw8,7
-        .MON_TX_SEL          ( ),                    // N/A
-        .MON_TRG_TX_ISK      ( ),                    // N/A returns 4 bits
-        .MON_TRG_TX_DATA     ( )                     // N/A returns 32 bits
-    );
-
-    dcfeb_fiber_out  dcfeb2out (
-        .RST                 ( reset),               // Manual only
-        .TRG_SIGDET          (),                      // from IPAD to IBUF.  N/A?
-        .TRG_RX_N            ( ),                    // empty
-        .TRG_RX_P            ( ),                    // empty
-        .TRG_TDIS            ( ),                    // OBUF output, for what?  N/A?
-        .TRG_TX_N            ( txn[2]),              // pick a fiber
-        .TRG_TX_P            ( txp[2]),              // pick a fiber
-        .G1C                 ( cfeb_fiber_out[1][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-        .G2C                 ( cfeb_fiber_out[1][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
-        .G3C                 ( cfeb_fiber_out[1][23:16]), // but good for testing low-rate non-zero triad data:
-        .G4C                 ( cfeb_fiber_out[1][31:24]),
-        .G5C                 ( cfeb_fiber_out[1][39:32]),
-        .G6C                 ( cfeb_fiber_out[1][47:40]),
-        .TRG_TX_REFCLK       ( ck160),               // QPLL 160 from MGT clk
-        .TRG_TXUSRCLK        ( snap_clk2),           // get 160 from TXOUTCLK (times 2)
-        .TRG_CLK80           ( tx_clk),              // get 80 from TXOUTCLK
-        .TRG_GTXTXRST        ( 1'b0),                // maybe Manual "reset" only
-        .TRG_TX_PLLRST       ( 1'b0),                // Tie LOW.
-        .TRG_RST             ( fiber_reset),         // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        //.ENA_TEST_PAT        ( sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-        .ENA_TEST_PAT        (1'b0),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-        .INJ_ERR             ( ferr_f[2] & sw[8]),   // use my switch/PB combo logic for this, high-true? Pulse high once.
-        .TRG_SD              ( ),                    // from IBUF, useless output. N/A
-        .TRG_TXOUTCLK        ( ),                    // 80 MHz; This has to go to MCM to generate 160/80
-        .TRG_TX_PLL_LOCK     ( ),                    // inverse holds the MCM in Reset                                                                                                                                                                       // Tx GTX PLL Ref lock
-        .TRG_TXRESETDONE     ( ),                    // N/A
-        .TX_SYNC_DONE        ( ),                    // not used in DCFEB tests
-        .STRT_LTNCY          ( tx_begin[2]),         // after every Reset, to TP for debug only  -- !sw7 ?
-        .LTNCY_TRIG          ( tx_fc[2]),            // bring out to TP.  Signals when TX sends "FC" (once every 128 BX).  Send raw to TP  --sw8,7
-        .MON_TX_SEL          ( ),                    // N/A
-        .MON_TRG_TX_ISK      ( ),                    // N/A returns 4 bits
-        .MON_TRG_TX_DATA     ( )                     // N/A returns 32 bits
-    );
-
-    dcfeb_fiber_out  dcfeb3out (
-        .RST                 ( reset),               // Manual only
-        .TRG_SIGDET          (),                      // from IPAD to IBUF.  N/A?
-        .TRG_RX_N            ( ),                    // empty
-        .TRG_RX_P            ( ),                    // empty
-        .TRG_TDIS            ( ),                    // OBUF output, for what?  N/A?
-        .TRG_TX_N            ( txn[3]),              // pick a fiber
-        .TRG_TX_P            ( txp[3]),              // pick a fiber
-        .G1C                 ( cfeb_fiber_out[2][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-        .G2C                 ( cfeb_fiber_out[2][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
-        .G3C                 ( cfeb_fiber_out[2][23:16]), // but good for testing low-rate non-zero triad data:
-        .G4C                 ( cfeb_fiber_out[2][31:24]),
-        .G5C                 ( cfeb_fiber_out[2][39:32]),
-        .G6C                 ( cfeb_fiber_out[2][47:40]),
-        .TRG_TX_REFCLK       ( ck160),               // QPLL 160 from MGT clk
-        .TRG_TXUSRCLK        ( snap_clk2),           // get 160 from TXOUTCLK (times 2)
-        .TRG_CLK80           ( tx_clk),              // get 80 from TXOUTCLK
-        .TRG_GTXTXRST        ( 1'b0),                // maybe Manual "reset" only
-        .TRG_TX_PLLRST       ( 1'b0),                // Tie LOW.
-        .TRG_RST             ( fiber_reset),         // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        //.ENA_TEST_PAT        ( sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-        .ENA_TEST_PAT        (1'b0),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-        .INJ_ERR             ( ferr_f[3] & sw[8]),   // use my switch/PB combo logic for this, high-true? Pulse high once.
-        .TRG_SD              ( ),                    // from IBUF, useless output. N/A
-        .TRG_TXOUTCLK        ( ),                    // 80 MHz; This has to go to MCM to generate 160/80
-        .TRG_TX_PLL_LOCK     ( ),                    // inverse holds the MCM in Reset                                                                                                                                                                       // Tx GTX PLL Ref lock
-        .TRG_TXRESETDONE     ( ),                    // N/A
-        .TX_SYNC_DONE        ( ),                    // not used in DCFEB tests
-        .STRT_LTNCY          ( tx_begin[3]),         // after every Reset, to TP for debug only  -- !sw7 ?
-        .LTNCY_TRIG          ( tx_fc[3]),            // bring out to TP.  Signals when TX sends "FC" (once every 128 BX).  Send raw to TP  --sw8,7
-        .MON_TX_SEL          ( ),                    // N/A
-        .MON_TRG_TX_ISK      ( ),                    // N/A returns 4 bits
-        .MON_TRG_TX_DATA     ( )                     // N/A returns 32 bits
-    );
-
-    dcfeb_fiber_out  dcfeb4out (
-        .RST                 ( reset),               // Manual only
-        .TRG_SIGDET          (),                      // from IPAD to IBUF.  N/A?
-        .TRG_RX_N            ( ),                    // empty
-        .TRG_RX_P            ( ),                    // empty
-        .TRG_TDIS            ( ),                    // OBUF output, for what?  N/A?
-        .TRG_TX_N            ( txn[4]),              // pick a fiber
-        .TRG_TX_P            ( txp[4]),              // pick a fiber
-        .G1C                 ( cfeb_fiber_out[3][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
-        .G2C                 ( cfeb_fiber_out[3][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
-        .G3C                 ( cfeb_fiber_out[3][23:16]), // but good for testing low-rate non-zero triad data:
-        .G4C                 ( cfeb_fiber_out[3][31:24]),
-        .G5C                 ( cfeb_fiber_out[3][39:32]),
-        .G6C                 ( cfeb_fiber_out[3][47:40]),
-        .TRG_TX_REFCLK       ( ck160),               // QPLL 160 from MGT clk
-        .TRG_TXUSRCLK        ( snap_clk2),           // get 160 from TXOUTCLK (times 2)
-        .TRG_CLK80           ( tx_clk),              // get 80 from TXOUTCLK
-        .TRG_GTXTXRST        ( 1'b0),                // maybe Manual "reset" only
-        .TRG_TX_PLLRST       ( 1'b0),                // Tie LOW.
-        .TRG_RST             ( fiber_reset),         // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        //.ENA_TEST_PAT        ( sw[8]),               // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-        .ENA_TEST_PAT        (1'b0),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-        .INJ_ERR             ( ferr_f[4] & sw[8]),   // use my switch/PB combo logic for this, high-true? Pulse high once.
-        .TRG_SD              ( ),                    // from IBUF, useless output. N/A
-        .TRG_TXOUTCLK        ( ),                    // 80 MHz; This has to go to MCM to generate 160/80
-        .TRG_TX_PLL_LOCK     ( ),                    // inverse holds the MCM in Reset                                                                                                                                                                       // Tx GTX PLL Ref lock
-        .TRG_TXRESETDONE     ( ),                    // N/A
-        .TX_SYNC_DONE        ( ),                    // not used in DCFEB tests
-        .STRT_LTNCY          ( tx_begin[4]),         // after every Reset, to TP for debug only  -- !sw7 ?
-        .LTNCY_TRIG          ( tx_fc[4]),            // bring out to TP.  Signals when TX sends "FC" (once every 128 BX).  Send raw to TP--sw8,7
-        .MON_TX_SEL          ( ),                    // N/A
-        .MON_TRG_TX_ISK      ( ),                    // N/A returns 4 bits
-        .MON_TRG_TX_DATA     ( )                     // N/A returns 32 bits
     );
 
     gem_fiber_out  gem1out   (
@@ -1585,7 +1444,7 @@ module CSC_GEM_Emulator (
         .TRG_TX_N            (txn[5]),                // pick a fiber
         .TRG_TX_P            (txp[5]),                // pick a fiber
 
-        .GEM_DATA            (gem_fiber_out[1][55:0 ]),
+        .GEM_DATA            (gem_fiber_out[1][55:0]),
         .GEM_OVERFLOW        (1'b0),
 
         .TRG_TX_REFCLK       (ck160),                 // QPLL 160 from MGT clk
@@ -1594,12 +1453,12 @@ module CSC_GEM_Emulator (
         .TRG_GTXTXRST        (1'b0     ),             // maybe Manual "reset" only
         .TRG_TX_PLLRST       (txpll_rst),             // Tie LOW.
         .TRG_RST             (fiber_reset),           // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        .ENA_TEST_PAT        (1'b0),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-        //.ENA_TEST_PAT        (sw[8]),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        .ENA_TEST_PAT        (1'b0),                  // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+      //.ENA_TEST_PAT        (sw[8]),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
         .INJ_ERR             (ferr_f[5] & sw[8]),     // use my switch/PB combo logic for this, high-true? Pulse high once.
         .TRG_SD              (),                      // from IBUF, useless output. N/A
         .TRG_TXOUTCLK        (),                      // 80 MHz; This has to go to MCM to generate 160/80
-        .TRG_TX_PLL_LOCK     (),                      // inverse holds the MCM in Reset                                                                                                                                                                       // Tx GTX PLL Ref lock
+        .TRG_TX_PLL_LOCK     (),                      // inverse holds the MCM in Reset; Tx GTX PLL Ref lock
         .TRG_TXRESETDONE     (),                      // N/A
         .TX_SYNC_DONE        (),                      // not used in DCFEB tests
         .STRT_LTNCY          (tx_begin[5]),           // after every Reset, to TP for debug only  -- !sw7 ?
@@ -1627,13 +1486,12 @@ module CSC_GEM_Emulator (
         .TRG_GTXTXRST        (1'b0     ),             // maybe Manual "reset" only
         .TRG_TX_PLLRST       (txpll_rst),             // Tie LOW.
         .TRG_RST             (fiber_reset),           // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        .ENA_TEST_PAT        (1'b0),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-        //.ENA_TEST_PAT        (sw[8]),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        .ENA_TEST_PAT        (1'b0),                  // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+      //.ENA_TEST_PAT        (sw[8]),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
         .INJ_ERR             (ferr_f[6] & sw[8]),     // use my switch/PB combo logic for this, high-true? Pulse high once.
         .TRG_SD              (),                      // from IBUF, useless output. N/A
         .TRG_TXOUTCLK        (),                      // 80 MHz; This has to go to MCM to generate 160/80
-        .TRG_TX_PLL_LOCK     (),                      // inverse holds the MCM in Reset                                                                                                                                                                       // Tx GTX PLL Ref lock
-        .TRG_TXRESETDONE     (),                      // N/A
+        .TRG_TX_PLL_LOCK     (),                      // inverse holds the MCM in Reset; Tx GTX PLL Ref lock .TRG_TXRESETDONE(), // N/A
         .TX_SYNC_DONE        (),                      // not used in DCFEB tests
         .STRT_LTNCY          (tx_begin[6]),           // after every Reset, to TP for debug only  -- !sw7 ?
         .LTNCY_TRIG          (tx_fc[6]),              // bring out to TP.  Signals when TX sends "FC" (once every 128 BX).  Send raw to TP  --sw8,7
@@ -1660,12 +1518,12 @@ module CSC_GEM_Emulator (
         .TRG_GTXTXRST        (1'b0     ),             // maybe Manual "reset" only
         .TRG_TX_PLLRST       (txpll_rst),             // Tie LOW.
         .TRG_RST             (fiber_reset),           // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        .ENA_TEST_PAT        (1'b0),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-        //.ENA_TEST_PAT        (sw[8]),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        .ENA_TEST_PAT        (1'b0),                  // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+      //.ENA_TEST_PAT        (sw[8]),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
         .INJ_ERR             (ferr_f[7] & sw[8]),     // use my switch/PB combo logic for this, high-true? Pulse high once.
         .TRG_SD              (),                      // from IBUF, useless output. N/A
         .TRG_TXOUTCLK        (),                      // 80 MHz; This has to go to MCM to generate 160/80
-        .TRG_TX_PLL_LOCK     (),                      // inverse holds the MCM in Reset                                                                                                                                                                       // Tx GTX PLL Ref lock
+        .TRG_TX_PLL_LOCK     (),                      // inverse holds the MCM in Reset; Tx GTX PLL Ref lock
         .TRG_TXRESETDONE     (),                      // N/A
         .TX_SYNC_DONE        (),                      // not used in DCFEB tests
         .STRT_LTNCY          (tx_begin[7]),           // after every Reset, to TP for debug only  -- !sw7 ?
@@ -1675,6 +1533,146 @@ module CSC_GEM_Emulator (
         .MON_TRG_TX_DATA     ()                       // N/A returns 32 bits
     );
 
+    dcfeb_fiber_out  dcfeb0out (
+        .RST                 (reset),                    // Manual only
+        .TRG_SIGDET          (),                          // from IPAD to IBUF.  N/A?
+        .TRG_RX_N            (),                         // empty
+        .TRG_RX_P            (),                         // empty
+        .TRG_TDIS            (),                         // OBUF output, for what?  N/A?
+        .TRG_TX_N            (txn[1]),                   // pick a fiber
+        .TRG_TX_P            (txp[1]),                   // pick a fiber
+        .G1C                 (cfeb_fiber_out[0][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+        .G2C                 (cfeb_fiber_out[0][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
+        .G3C                 (cfeb_fiber_out[0][23:16]), // but good for testing low-rate non-zero triad data:
+        .G4C                 (cfeb_fiber_out[0][31:24]),
+        .G5C                 (cfeb_fiber_out[0][39:32]),
+        .G6C                 (cfeb_fiber_out[0][47:40]),
+        .TRG_TX_REFCLK       (ck160),                    // QPLL 160 from MGT clk
+        .TRG_TXUSRCLK        (snap_clk2),                // get 160 from TXOUTCLK (times 2)
+        .TRG_CLK80           (tx_clk),                   // get 80 from TXOUTCLK
+        .TRG_GTXTXRST        (txpll_rst),                // maybe Manual "reset" only
+        .TRG_TX_PLLRST       (txpll_rst),                // Tie LOW.
+        .TRG_RST             (fiber_reset),              // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
+      //.ENA_TEST_PAT        (sw[8]),                    // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        .ENA_TEST_PAT        (1'b0),                      // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        .INJ_ERR             (ferr_f[1] & sw[8]),        // use my switch/PB combo logic for this, high-true? Pulse high once.
+        .TRG_SD              (),                         // from IBUF, useless output. N/A
+        .TRG_TXOUTCLK        (tx_clk_out),               // 80 MHz; This has to go to MCM to generate 160/80
+        .TRG_TX_PLL_LOCK     (ck160_locked),             // inverse holds the MCM in Reset; Tx GTX PLL Ref lock
+        .TRG_TXRESETDONE     (),                         // N/A
+        .TX_SYNC_DONE        (synced_snapt),             // not used in DCFEB tests
+        .STRT_LTNCY          (tx_begin[1]),              // after every Reset, to TP for debug only  -- !sw7 ?
+        .LTNCY_TRIG          (tx_fc[1]),                 // bring out to TP.  Signals when TX sends "FC" (once every 128 BX).  Send raw to TP  --sw8,7
+        .MON_TX_SEL          (),                         // N/A
+        .MON_TRG_TX_ISK      (),                         // N/A returns 4 bits
+        .MON_TRG_TX_DATA     ()                          // N/A returns 32 bits
+    );
+
+    dcfeb_fiber_out dcfeb1out(
+        .RST                 (reset),                    // Manual only
+        .TRG_SIGDET          (),                         // from IPAD to IBUF.  N/A?
+        .TRG_RX_N            (),                         // empty
+        .TRG_RX_P            (),                         // empty
+        .TRG_TDIS            (),                         // OBUF output, for what?  N/A?
+        .TRG_TX_N            (txn[2]),                   // pick a fiber
+        .TRG_TX_P            (txp[2]),                   // pick a fiber
+        .G1C                 (cfeb_fiber_out[1][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+        .G2C                 (cfeb_fiber_out[1][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
+        .G3C                 (cfeb_fiber_out[1][23:16]), // but good for testing low-rate non-zero triad data:
+        .G4C                 (cfeb_fiber_out[1][31:24]),
+        .G5C                 (cfeb_fiber_out[1][39:32]),
+        .G6C                 (cfeb_fiber_out[1][47:40]),
+        .TRG_TX_REFCLK       (ck160),                    // QPLL 160 from MGT clk
+        .TRG_TXUSRCLK        (snap_clk2),                // get 160 from TXOUTCLK (times 2)
+        .TRG_CLK80           (tx_clk),                   // get 80 from TXOUTCLK
+        .TRG_GTXTXRST        (1'b0),                     // maybe Manual "reset" only
+        .TRG_TX_PLLRST       (1'b0),                     // Tie LOW.
+        .TRG_RST             (fiber_reset),              // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
+      //.ENA_TEST_PAT        (sw[8]),                    // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        .ENA_TEST_PAT        (1'b0),                     // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        .INJ_ERR             (ferr_f[2] & sw[8]),        // use my switch/PB combo logic for this, high-true? Pulse high once.
+        .TRG_SD              (),                         // from IBUF, useless output. N/A
+        .TRG_TXOUTCLK        (),                         // 80 MHz; This has to go to MCM to generate 160/80
+        .TRG_TX_PLL_LOCK     (),                         // inverse holds the MCM in Reset; Tx GTX PLL Ref lock
+        .TRG_TXRESETDONE     (),                         // N/A
+        .TX_SYNC_DONE        (),                         // not used in DCFEB tests
+        .STRT_LTNCY          (tx_begin[2]),              // after every Reset, to TP for debug only  -- !sw7 ?
+        .LTNCY_TRIG          (tx_fc[2]),                 // bring out to TP.  Signals when TX sends "FC" (once every 128 BX).  Send raw to TP  --sw8,7
+        .MON_TX_SEL          (),                         // N/A
+        .MON_TRG_TX_ISK      (),                         // N/A returns 4 bits
+        .MON_TRG_TX_DATA     ()                          // N/A returns 32 bits
+    );
+
+    dcfeb_fiber_out dcfeb2out(
+        .RST                 (reset),                    // Manual only
+        .TRG_SIGDET          (),                         // from IPAD to IBUF.  N/A?
+        .TRG_RX_N            (),                         // empty
+        .TRG_RX_P            (),                         // empty
+        .TRG_TDIS            (),                         // OBUF output, for what?  N/A?
+        .TRG_TX_N            (txn[3]),                   // pick a fiber
+        .TRG_TX_P            (txp[3]),                   // pick a fiber
+        .G1C                 (cfeb_fiber_out[2][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+        .G2C                 (cfeb_fiber_out[2][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
+        .G3C                 (cfeb_fiber_out[2][23:16]), // but good for testing low-rate non-zero triad data:
+        .G4C                 (cfeb_fiber_out[2][31:24]),
+        .G5C                 (cfeb_fiber_out[2][39:32]),
+        .G6C                 (cfeb_fiber_out[2][47:40]),
+        .TRG_TX_REFCLK       (ck160),                    // QPLL 160 from MGT clk
+        .TRG_TXUSRCLK        (snap_clk2),                // get 160 from TXOUTCLK (times 2)
+        .TRG_CLK80           (tx_clk),                   // get 80 from TXOUTCLK
+        .TRG_GTXTXRST        (1'b0),                     // maybe Manual "reset" only
+        .TRG_TX_PLLRST       (1'b0),                     // Tie LOW.
+        .TRG_RST             (fiber_reset),              // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
+      //.ENA_TEST_PAT        (sw[8]),                    // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        .ENA_TEST_PAT        (1'b0),                     // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        .INJ_ERR             (ferr_f[3] & sw[8]),        // use my switch/PB combo logic for this, high-true? Pulse high once.
+        .TRG_SD              (),                         // from IBUF, useless output. N/A
+        .TRG_TXOUTCLK        (),                         // 80 MHz; This has to go to MCM to generate 160/80
+        .TRG_TX_PLL_LOCK     (),                         // inverse holds the MCM in Reset; Tx GTX PLL Ref lock
+        .TRG_TXRESETDONE     (),                         // N/A
+        .TX_SYNC_DONE        (),                         // not used in DCFEB tests
+        .STRT_LTNCY          (tx_begin[3]),              // after every Reset, to TP for debug only  -- !sw7 ?
+        .LTNCY_TRIG          (tx_fc[3]),                 // bring out to TP.  Signals when TX sends "FC" (once every 128 BX).  Send raw to TP  --sw8,7
+        .MON_TX_SEL          (),                         // N/A
+        .MON_TRG_TX_ISK      (),                         // N/A returns 4 bits
+        .MON_TRG_TX_DATA     ()                          // N/A returns 32 bits
+    );
+
+    dcfeb_fiber_out  dcfeb3out (
+        .RST                 (reset),                    // Manual only
+        .TRG_SIGDET          (),                         // from IPAD to IBUF.  N/A?
+        .TRG_RX_N            (),                         // empty
+        .TRG_RX_P            (),                         // empty
+        .TRG_TDIS            (),                         // OBUF output, for what?  N/A?
+        .TRG_TX_N            (txn[4]),                   // pick a fiber
+        .TRG_TX_P            (txp[4]),                   // pick a fiber
+        .G1C                 (cfeb_fiber_out[3][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
+        .G2C                 (cfeb_fiber_out[3][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
+        .G3C                 (cfeb_fiber_out[3][23:16]), // but good for testing low-rate non-zero triad data:
+        .G4C                 (cfeb_fiber_out[3][31:24]),
+        .G5C                 (cfeb_fiber_out[3][39:32]),
+        .G6C                 (cfeb_fiber_out[3][47:40]),
+        .TRG_TX_REFCLK       (ck160),                    // QPLL 160 from MGT clk
+        .TRG_TXUSRCLK        (snap_clk2),                // get 160 from TXOUTCLK (times 2)
+        .TRG_CLK80           (tx_clk),                   // get 80 from TXOUTCLK
+        .TRG_GTXTXRST        (1'b0),                     // maybe Manual "reset" only
+        .TRG_TX_PLLRST       (1'b0),                     // Tie LOW.
+        .TRG_RST             (fiber_reset),              // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
+      //.ENA_TEST_PAT        (sw[8]),                    // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        .ENA_TEST_PAT        (1'b0),                     // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+        .INJ_ERR             (ferr_f[4] & sw[8]),        // use my switch/PB combo logic for this, high-true? Pulse high once.
+        .TRG_SD              (),                         // from IBUF, useless output. N/A
+        .TRG_TXOUTCLK        (),                         // 80 MHz; This has to go to MCM to generate 160/80
+        .TRG_TX_PLL_LOCK     (),                         // inverse holds the MCM in Reset; Tx GTX PLL Ref lock
+        .TRG_TXRESETDONE     (),                         // N/A
+        .TX_SYNC_DONE        (),                         // not used in DCFEB tests
+        .STRT_LTNCY          (tx_begin[4]),              // after every Reset, to TP for debug only  -- !sw7 ?
+        .LTNCY_TRIG          (tx_fc[4]),                 // bring out to TP.  Signals when TX sends "FC" (once every 128 BX).  Send raw to TP--sw8,7
+        .MON_TX_SEL          (),                         // N/A
+        .MON_TRG_TX_ISK      (),                         // N/A returns 4 bits
+        .MON_TRG_TX_DATA     ()                          // N/A returns 32 bits
+    );
+
     wire fiberout_sump = (|tx_begin[7:0]) | (|tx_fc[7:0]) |synced_snapt | t12_fault | r12_fok;
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -1682,11 +1680,12 @@ module CSC_GEM_Emulator (
 //----------------------------------------------------------------------------------------------------------------------
 
 x_flashsm #(22) led0 (.trigger(chm_adr==1),         .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_led));
-x_flashsm #(22) led1 (.trigger(cmd_code==CMD_DUMP),   .hold(1'b0), .clock(gbe_txclk2), .out(dump_led));
-x_flashsm #(22) led2 (.trigger(cmd_code==CMD_WRITE),  .hold(1'b0), .clock(gbe_txclk2), .out(cmd_code_led));
-x_flashsm #(22) led3 (.trigger(chm_fb==1), .hold(1'b0), .clock(gbe_txclk2), .out(rxdat_led));
+x_flashsm #(22) led1 (.trigger(cmd_code==CMD_DUMP), .hold(1'b0), .clock(gbe_txclk2), .out(dump_led));
+x_flashsm #(22) led2 (.trigger(cmd_code==CMD_WRITE),.hold(1'b0), .clock(gbe_txclk2), .out(cmd_code_led));
+x_flashsm #(22) led3 (.trigger(chm_fb==1),          .hold(1'b0), .clock(gbe_txclk2), .out(rxdat_led));
+
 x_flashsm #(22) led4 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_adr<MXBRAMS && gbe_rxcount==16'h5), .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_led2));
-x_flashsm #(22) led5 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_adr<MXBRAMS && rx_adr==11'h7ff), .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_done));
+x_flashsm #(22) led5 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_adr<MXBRAMS && rx_adr==11'h7ff),    .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_done));
 
     wire sump = gbe_sump | fiberout_sump | clk_sump | gem_sump;
 
@@ -1701,14 +1700,14 @@ x_flashsm #(22) led5 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_ad
         led_low[6] =  1'b0;             // 1'b0;                                   // --> ON!  comes from mmcm driven by tx_pll_ck160 in FPGA
         led_low[7] =  1'b0;             // lhc_clk;                                // just reset, includes ccb_rx[1]==L1reset
 
-        led_hi[8]  = ~ (1'b0 ^ loading_bram_led  ); //!(hold_bit | gtx_reset) ; // M1: synced with PB & errors at crate Rx
-        led_hi[9]  = ~ (1'b0 ^ dump_led          ); // qpll_lock_lost         ; // 0
-        led_hi[10] = ~ (1'b0 ^ cmd_code_led      ); //!cmd_code[7]            ; // !gtx_reset                              ; // 0
-        led_hi[11] = ~ (1'b0 ^ rxdat_led         ); //!rd_ptr[8]              ; // ~6.25 usec  // gtx_ready                ; // 1
-        led_hi[12] = ~ (1'b0 ^ loading_bram_led2 ); //!dump_enable_rr         ; // 12.5 usec   //
-        led_hi[13] = ~ (1'b0 ^ loading_bram_done ); //!dump_enable_r          ; // 12.5 usec   // (locked & lhc_locked)    ; // 1
-        led_hi[14] = ~ (1'b0 ^ packing              ); //!dump_enable            ; // 12.5 usec
-        led_hi[15] = ~ (1'b0 ^ loading_bram_led  ); //!dump_done              ; // 50ns
+        led_hi[8]  = ~(1'b0 ^ loading_bram_led  ); //!(hold_bit | gtx_reset) ; // M1: synced with PB & errors at crate Rx
+        led_hi[9]  = ~(1'b0 ^ dump_led          ); // qpll_lock_lost         ; // 0
+        led_hi[10] = ~(1'b0 ^ cmd_code_led      ); //!cmd_code[7]            ; // !gtx_reset                              ; // 0
+        led_hi[11] = ~(1'b0 ^ rxdat_led         ); //!rd_ptr[8]              ; // ~6.25 usec  // gtx_ready                ; // 1
+        led_hi[12] = ~(1'b0 ^ loading_bram_led2 ); //!dump_enable_rr         ; // 12.5 usec   //
+        led_hi[13] = ~(1'b0 ^ loading_bram_done ); //!dump_enable_r          ; // 12.5 usec   // (locked & lhc_locked)    ; // 1
+        led_hi[14] = ~(1'b0 ^ packing           ); //!dump_enable            ; // 12.5 usec
+        led_hi[15] = ~(1'b0 ^ loading_bram_led  ); //!dump_done              ; // 50ns
 
         test_led[9]   = lhc_ck;
         test_led[10]  = 1'b0;
