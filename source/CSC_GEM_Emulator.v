@@ -610,7 +610,7 @@ module CSC_GEM_Emulator (
     assign valid_gem0 = ~&{gem_packet0[10:9],gem_packet0[24:23]};
 
     // Choose data to be written to RAM
-    assign data_in0 = packing ? (chm_fb ? gem_packet1[31:0] : gem_packet0[31:0]) : data_iram[31:0];
+    assign data_in0 = packing ? (chm_fb ?       gem_packet1[31: 0]  :       gem_packet0[31: 0])  : data_iram[31: 0];
     assign data_in1 = packing ? (chm_fb ? {8'b0,gem_packet1[55:32]} : {8'b0,gem_packet0[55:32]}) : data_iram[63:32];
 
     wire bram_rd_en[MXBRAMS-1:0];
@@ -1309,6 +1309,7 @@ module CSC_GEM_Emulator (
 // GEM Data Processing
 //----------------------------------------------------------------------------------------------------------------------
 
+
     wire [63:0] vfat_sbits [23:0];
 
     genvar ivfat;
@@ -1320,36 +1321,47 @@ module CSC_GEM_Emulator (
 
     wire [13:0] cluster [7:0];
 
-    cluster_packer u_cluster_packer (
+    // define vfat 2 = 1 to compile cluster packer in vfat2 mode: speeds compilation
+    `define VFAT2 1 
+
+    `ifdef VFAT2
+       parameter MXSBITS = 8; 
+      `define PACKER cluster_packer_vfat2
+    `else 
+       parameter MXSBITS = 64; 
+      `define PACKER cluster_packer
+    `endif
+
+    `PACKER u_cluster_packer (
 
         .clock4x (snap_clk2),
 
         .global_reset (reset),
 
-        .vfat0  (vfat_sbits[0]),
-        .vfat1  (vfat_sbits[1]),
-        .vfat2  (vfat_sbits[2]),
-        .vfat3  (vfat_sbits[3]),
-        .vfat4  (vfat_sbits[4]),
-        .vfat5  (vfat_sbits[5]),
-        .vfat6  (vfat_sbits[6]),
-        .vfat7  (vfat_sbits[7]),
-        .vfat8  (vfat_sbits[8]),
-        .vfat9  (vfat_sbits[9]),
-        .vfat10 (vfat_sbits[10]),
-        .vfat11 (vfat_sbits[11]),
-        .vfat12 (vfat_sbits[12]),
-        .vfat13 (vfat_sbits[13]),
-        .vfat14 (vfat_sbits[14]),
-        .vfat15 (vfat_sbits[15]),
-        .vfat16 (vfat_sbits[16]),
-        .vfat17 (vfat_sbits[17]),
-        .vfat18 (vfat_sbits[18]),
-        .vfat19 (vfat_sbits[19]),
-        .vfat20 (vfat_sbits[20]),
-        .vfat21 (vfat_sbits[21]),
-        .vfat22 (vfat_sbits[22]),
-        .vfat23 (vfat_sbits[23]),
+        .vfat0  (vfat_sbits[0] [MXSBITS-1:0]),
+        .vfat1  (vfat_sbits[1] [MXSBITS-1:0]),
+        .vfat2  (vfat_sbits[2] [MXSBITS-1:0]),
+        .vfat3  (vfat_sbits[3] [MXSBITS-1:0]),
+        .vfat4  (vfat_sbits[4] [MXSBITS-1:0]),
+        .vfat5  (vfat_sbits[5] [MXSBITS-1:0]),
+        .vfat6  (vfat_sbits[6] [MXSBITS-1:0]),
+        .vfat7  (vfat_sbits[7] [MXSBITS-1:0]),
+        .vfat8  (vfat_sbits[8] [MXSBITS-1:0]),
+        .vfat9  (vfat_sbits[9] [MXSBITS-1:0]),
+        .vfat10 (vfat_sbits[10][MXSBITS-1:0]),
+        .vfat11 (vfat_sbits[11][MXSBITS-1:0]),
+        .vfat12 (vfat_sbits[12][MXSBITS-1:0]),
+        .vfat13 (vfat_sbits[13][MXSBITS-1:0]),
+        .vfat14 (vfat_sbits[14][MXSBITS-1:0]),
+        .vfat15 (vfat_sbits[15][MXSBITS-1:0]),
+        .vfat16 (vfat_sbits[16][MXSBITS-1:0]),
+        .vfat17 (vfat_sbits[17][MXSBITS-1:0]),
+        .vfat18 (vfat_sbits[18][MXSBITS-1:0]),
+        .vfat19 (vfat_sbits[19][MXSBITS-1:0]),
+        .vfat20 (vfat_sbits[20][MXSBITS-1:0]),
+        .vfat21 (vfat_sbits[21][MXSBITS-1:0]),
+        .vfat22 (vfat_sbits[22][MXSBITS-1:0]),
+        .vfat23 (vfat_sbits[23][MXSBITS-1:0]),
 
         .truncate_clusters (1'b0),
 
