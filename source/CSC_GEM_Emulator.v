@@ -1378,8 +1378,8 @@ module CSC_GEM_Emulator (
         .cluster7 (cluster[7])
     );
 
-    assign gem_packet0 = {cluster[0], cluster[1], cluster[2], cluster[3]};
-    assign gem_packet1 = {cluster[4], cluster[5], cluster[6], cluster[7]};
+    assign gem_packet0 = {cluster[3], cluster[2], cluster[1], cluster[0]};
+    assign gem_packet1 = {cluster[7], cluster[6], cluster[5], cluster[4]};
     wire gem_sump = (|gem_packet1);
 
 //----------------------------------------------------------------------------------------------------------------------
