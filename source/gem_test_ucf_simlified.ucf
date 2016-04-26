@@ -1,13 +1,13 @@
 NET "gtl_loop" LOC = G21; #  io_[309]
 
+NET "led_hi[8]"     LOC  = G23;
+NET "led_hi[9]"     LOC  = H23;
 NET "led_hi[10]"    LOC  = N24;
 NET "led_hi[11]"    LOC  = N23;
 NET "led_hi[12]"    LOC  = F23;
 NET "led_hi[13]"    LOC  = F24;
 NET "led_hi[14]"    LOC  = L24;
 NET "led_hi[15]"    LOC  = M23;
-NET "led_hi[8]"     LOC  = G23;
-NET "led_hi[9]"     LOC  = H23;
 #NET "led_low[0]"   LOC  = AF24;
 #NET "led_low[1]"   LOC  = AF25;
 #NET "led_low[2]"   LOC  = W24;

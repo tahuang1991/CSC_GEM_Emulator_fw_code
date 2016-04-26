@@ -54,19 +54,21 @@
 //   Later replace GbE comparator readback with VME function?
 //
 //
-//  MTP Fiber Mapping to Signal Name, FPGA GTX channels, Diff. Pin Numbers, verilog name
-//    1:   Tx0-Rx0   GTX3-GTX0    AK1/AK2=Q0 - AP5/AP6=Q0     txp/n[0]-rxp/n[0]
-//    2:   Tx1-Rx1   GTX4-GTX1    AH1/AH2=Q1 - AM5/AM6=Q0     txp/n[1]-rxp/n[1]
-//    3:   Tx2-Rx2   GTX7-GTX2    AB1/AB2=Q1 - AL3/AL4=Q0     txp/n[2]-rxp/n[2]
-//    4:   Tx3-Rx3   GTX8-GTX3    Y1/Y2=Q2   - AJ3/AJ4=Q0     txp/n[3]-rxp/n[3]
-//    9:   Tx4-Rx8   GTX9-GTX8    V1/V2=Q2   - AA3/AA4=Q2     txp/n[4]-rxp/n[4]
-//    10:  Tx5-Rx9   GTX10-GTX9   T1/T2=Q2   - W3/W4=Q2       txp/n[5]-rxn/p[5] --RX swapped!
-//    11:  Tx6-Rx10  GTX11-GTX10  P1/P2=Q2   - U3/U4=Q2       txp/n[6]-rxn/p[6] --RX swapped!
-//    12:  Tx7-Rx11  GTX2-GTX11   AM1/AM2=Q0 - R3/R4=Q2       txp/n[7]-rxp/n[7] <<-- used this @OSU
-//    5:    Rx4        GTX4           AG3/AG4
-//    6:    Rx5        GTX5           AF5/AF6
-//    7:    Rx6        GTX6           AE3/AE4
-//    8:    Rx7        GTX7           AC3/AC4
+//  MTP Fiber Mapping to Signal Name, 
+//         MTP         FPGA GTX channels, Diff. Pin Numbers,         verilog name
+//    1:    Tx0-Rx0    GTX3-GTX0          AK1/AK2=Q0 - AP5/AP6=Q0     txp/n[0]-rxp/n[0]
+//    2:    Tx1-Rx1    GTX4-GTX1          AH1/AH2=Q1 - AM5/AM6=Q0     txp/n[1]-rxp/n[1]
+//    3:    Tx2-Rx2    GTX7-GTX2          AB1/AB2=Q1 - AL3/AL4=Q0     txp/n[2]-rxp/n[2]
+//    4:    Tx3-Rx3    GTX8-GTX3          Y1/Y2=Q2   - AJ3/AJ4=Q0     txp/n[3]-rxp/n[3]
+//    9:    Tx4-Rx8    GTX9-GTX8          V1/V2=Q2   - AA3/AA4=Q2     txp/n[4]-rxp/n[4]
+//    10:   Tx5-Rx9    GTX10-GTX9         T1/T2=Q2   - W3/W4=Q2       txp/n[5]-rxn/p[5] --RX swapped!
+//    11:   Tx6-Rx10   GTX11-GTX10        P1/P2=Q2   - U3/U4=Q2       txp/n[6]-rxn/p[6] --RX swapped!
+//    12:   Tx7-Rx11   GTX2-GTX11         AM1/AM2=Q0 - R3/R4=Q2       txp/n[7]-rxp/n[7] <<-- used this @OSU
+//    5:    Rx4        GTX4               AG3/AG4
+//    6:    Rx5        GTX5               AF5/AF6
+//    7:    Rx6        GTX6               AE3/AE4
+//    8:    Rx7        GTX7               AC3/AC4
+// 
 //      QPLL 160 refclk comes into pins AB6/AB5, Quad 113 refclk 1 (Q1,C1)
 //   Q0=quad_112, Q1=quad_113, Q2=quad_114, Q3=quad_115, Q4=quad_116
 //
@@ -76,12 +78,12 @@
 module CSC_GEM_Emulator (
 
 // Clocks
-    input 	      ck125n, ck125p,
-    input 	      ck160n, ck160p,
-    input 	      lhc_ckn, lhc_ckp,
-    input 	      tmb_clock0,
+    input         ck125n, ck125p,
+    input         ck160n, ck160p,
+    input         lhc_ckn, lhc_ckp,
+    input         tmb_clock0,
 
-    input 	      qpll_lock,
+  //input         qpll_lock, // QPLL lock is not LOCed.. need to remove it from logic !
 
     output        gtl_loop,
 
@@ -90,27 +92,28 @@ module CSC_GEM_Emulator (
     input  [8:7]  sw,
 
 // Ethernet
-    input 	      ck_gben, ck_gbep,
-    input 	      gbe_rxn, gbe_rxp,
-    input 	      gbe_fok,
-    output 	      gbe_txn, gbe_txp,
-    output 	      f_sclk,
+    input         ck_gben, ck_gbep,
+    input         gbe_rxn, gbe_rxp,
+    input         gbe_fok,
+    output        gbe_txn, gbe_txp,
+    output        f_sclk,
 
-    output 	      rst_qpll, fcs,
+  //output        rst_qpll, 
+  //output fcs,  // fcs is not LOCed
 
 // LEDs
-    output reg [7:0]    led_low,
+  //output reg [7:0]    led_low, // this isn't loced 
     output reg [15:8]   led_hi,
     output reg [10:9]   test_led,
 
 // Snap-12 Tranceivers
-    input 	          t12_fault,
-    input             r12_fok,
+  //input             t12_fault, // not LOCed
+  //input             r12_fok,   // not LOCed
   //input  [7:1]      rxp,rxn,
-    output [7:0]      txp,txn,
-    output 	          t12_rst,
-    output            t12_sclk,
-    output            r12_sclk
+  //output            t12_rst,   // Not LOCed
+  //output            t12_sclk,  // Not LOCed
+  //output            r12_sclk,  // Not LOCed
+    output [7:0]      txp,txn
 ) /* synthesis syn_useioff = 1 */;
 
 //----------------------------------------------------------------------------------------------------------------------
@@ -135,8 +138,8 @@ module CSC_GEM_Emulator (
     // Counters
     //-------------------------
     reg [22:0]  free_count;
-    reg 	      free_tc;
-    reg 	      slow_tc;
+    reg         free_tc;
+    reg         slow_tc;
     reg [7:0]   time_count;
     reg [7:0]   time_r=8'h00;
     reg [7:0]   time_r_i;
@@ -177,7 +180,7 @@ module CSC_GEM_Emulator (
     wire        lhc_ck0, lhc_ck90, lhc_ck180, lhc_ck270, lhcckfbout, lhcckfbout_buf;
 
     wire        ck40, ck40buf, rdclk, wrclk;
-    reg 	    sel_rdclk = 0;
+    reg         sel_rdclk = 0;
     reg         sel_wrclk = 0;
 
     // pack state machine counters
@@ -233,14 +236,14 @@ module CSC_GEM_Emulator (
     reg         pkt_send;
     wire        tx_resetdone, rx_resetdone;
     reg  [7:0]  ovfl_packet;
-    reg 	      rx_timeout    = 1'b0;
+    reg           rx_timeout    = 1'b0;
     wire        ckgbe;
     wire        rxpll_lk;
     wire [2:0]  rx_bufstat;
     reg  [1:0]  gbe_kout      = 2'h1;
     reg  [1:0]  tx_kout       = 0;
     reg  [1:0]  tx_kout_r     = 1'b1;
-    reg 	      comma_align   = 0;
+    reg           comma_align   = 0;
     wire [5:0]  rxer;
     reg  [15:0] gbe_txdat     = 16'h50bc;
     reg  [15:0] tx_out;
@@ -248,7 +251,7 @@ module CSC_GEM_Emulator (
     wire [15:0] gbe_rxdat;
     reg  [15:0] l_gbe_rxdat;
     reg  [15:0] ll_gbe_rxdat;
-    reg 	      l_kchar       = 0;
+    reg           l_kchar       = 0;
     reg         ll_kchar;
     reg         mac_seek      = 0;
     reg         mac_sync      = 0;
@@ -282,11 +285,11 @@ module CSC_GEM_Emulator (
 
     assign f_sclk   = 1'b1;  // to Finisar GbE Transceiver
 
-    assign fcs      = 1'b1;  // drive high for Mezz 2012 compatibility, useful on the bench
-    assign t12_rst  = 1'b1;  // low-true signal for Snap12 Transmitter
-    assign t12_sclk = 1'b1;  // to Snap12 Transmitter
-    assign r12_sclk = 1'b1;  // to Snap12 Receiver
-    assign rst_qpll = 1'b1;  // reset is low-true, but in ExtControl mode (sw6 On) it becomes fSelect[5]
+    //assign fcs      = 1'b1;  // drive high for Mezz 2012 compatibility, useful on the bench
+    //assign t12_rst  = 1'b1;  // low-true signal for Snap12 Transmitter
+    //assign t12_sclk = 1'b1;  // to Snap12 Transmitter
+    //assign r12_sclk = 1'b1;  // to Snap12 Receiver
+    //assign rst_qpll = 1'b1;  // reset is low-true, but in ExtControl mode (sw6 On) it becomes fSelect[5]
     //                                                 and autoRestart (sw5) becomes fSelect[4]
     //        note that sw1-4 are fSelect[0:3] but they only function in ExtControl mode (sw6 On),
     //        and fSelect sets the VCXO center frequency (because automatic calibration is Off)
@@ -1383,16 +1386,16 @@ module CSC_GEM_Emulator (
 // qpll lock lost latch
 //----------------------------------------------------------------------------------------------------------------------
 
-    reg qpll_lock_lost;
-    always @(posedge lhc_clk or posedge reset) // everything that uses lhc_clk w/simple Reset
-    begin
-        if (reset) begin
-            qpll_lock_lost <= 0;
-        end
-        else begin
-            qpll_lock_lost <= !qpll_lock | qpll_lock_lost;
-        end
-    end
+    //  reg qpll_lock_lost;
+    //  always @(posedge lhc_clk or posedge reset) // everything that uses lhc_clk w/simple Reset
+    //  begin
+    //      if (reset) begin
+    //          qpll_lock_lost <= 0;
+    //      end
+    //      else begin
+    //          qpll_lock_lost <= !qpll_lock | qpll_lock_lost;
+    //      end
+    //  end
 
 //----------------------------------------------------------------------------------------------------------------------
 // snap12 mmcm clock manager
@@ -1685,7 +1688,7 @@ module CSC_GEM_Emulator (
         .MON_TRG_TX_DATA     ()                          // N/A returns 32 bits
     );
 
-    wire fiberout_sump = (|tx_begin[7:0]) | (|tx_fc[7:0]) |synced_snapt | t12_fault | r12_fok;
+    wire fiberout_sump = (|tx_begin[7:0]) | (|tx_fc[7:0]) |synced_snapt; 
 
 //----------------------------------------------------------------------------------------------------------------------
 // LED Assignments
@@ -1703,14 +1706,14 @@ x_flashsm #(22) led5 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_ad
 
     always @(*)
     begin                               // JG, v1p16: swap LED 3<>4, notes and all
-        led_low[0] =  gem_sump;
-        led_low[1] =  1'b0;  // 1'b0;
-        led_low[2] =  1'b0;             // qpll_lock;                              // always ON!   was !_ccb_rx[31] == _alct_adb_pulse_async
-        led_low[3] =  1'b0;             // qpll_lock_lost;                         // always OFF?  was _ccb_rx[35] == mpc_in1, always ON
-        led_low[4] =  1'b0;             // lhc_clk;
-        led_low[5] =  1'b0;             // ck160_locked;                           // always ON!                                              // Tx GTX PLL Ref lock
-        led_low[6] =  1'b0;             // 1'b0;                                   // --> ON!  comes from mmcm driven by tx_pll_ck160 in FPGA
-        led_low[7] =  1'b0;             // lhc_clk;                                // just reset, includes ccb_rx[1]==L1reset
+        // led_low[0] =  gem_sump;
+        // led_low[1] =  1'b0;  // 1'b0;
+        // led_low[2] =  1'b0;             // qpll_lock;                              // always ON!   was !_ccb_rx[31] == _alct_adb_pulse_async
+        // led_low[3] =  1'b0;             // qpll_lock_lost;                         // always OFF?  was _ccb_rx[35] == mpc_in1, always ON
+        // led_low[4] =  1'b0;             // lhc_clk;
+        // led_low[5] =  1'b0;             // ck160_locked;                           // always ON!                                              // Tx GTX PLL Ref lock
+        // led_low[6] =  1'b0;             // 1'b0;                                   // --> ON!  comes from mmcm driven by tx_pll_ck160 in FPGA
+        // led_low[7] =  1'b0;             // lhc_clk;                                // just reset, includes ccb_rx[1]==L1reset
 
         led_hi[8]  = ~(1'b0 ^ loading_bram_led  ); //!(hold_bit | gtx_reset) ; // M1: synced with PB & errors at crate Rx
         led_hi[9]  = ~(1'b0 ^ dump_led          ); // qpll_lock_lost         ; // 0
