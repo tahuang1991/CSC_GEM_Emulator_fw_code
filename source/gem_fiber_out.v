@@ -29,6 +29,7 @@ module   gem_fiber_out #( parameter SIM_SPEEDUP = 0)
 	output        TRG_TX_P,
 
   input [55:0]  GEM_DATA,
+  input  [7:0]  FRM_SEP,
   input         GEM_OVERFLOW,
 
 	input         TRG_TX_REFCLK, // RefClk?  I have 160...
@@ -195,38 +196,23 @@ OBUF  #(.DRIVE(12),.IOSTANDARD("DEFAULT"),.SLEW("SLOW")) OBUF_TRG_TDIS (.O(TRG_T
 		end
 	end
 
+	always @* begin
+    lt_trg = 1'b0;
+		if(!rst_tx && (trgcnt==8'h00)) lt_trg  = 1'b1;
+    else                           lt_trg  = 1'b0;
+	end
+
   // we should cycle through these four K-codes:  BC, F7, FB, FD to serve as
   // bunch sequence indicators.
   // when we have more than 8 clusters detected on an OH (that is, we had S-bit
   // overflow) we should send the "FC" K-code instead of the usual choice.
   //---------------------------------------------------
-
-
-  reg [2:0] frm_sep_cnt=0;
-  always @(posedge TRG_CLK80) begin
-    frm_sep_cnt <= (rst_tx) ? 0 : frm_sep_cnt + 1'b1;
-  end
-
-	always @* begin
-    lt_trg = 1'b0;
-		if(!rst_tx && (trgcnt==8'h00)) lt_trg  = 1'b1;
-    else                           lt_trg  = 1'b0;
-
+  always @* begin
     if (GEM_OVERFLOW)
       frm_sep = 8'hFC;
-    else begin
-      case (frm_sep_cnt)
-        3'd0: frm_sep = 8'hBC;
-        3'd1: frm_sep = 8'hBC;
-        3'd2: frm_sep = 8'hF7;
-        3'd3: frm_sep = 8'hF7;
-        3'd4: frm_sep = 8'hFB;
-        3'd5: frm_sep = 8'hFB;
-        3'd6: frm_sep = 8'hFD;
-        3'd7: frm_sep = 8'hFD;
-      endcase
-    end
-	end
+    else
+      frm_sep = FRM_SEP;
+  end
 
 
 //----------------------------------------------------------------------------------------------------------------------

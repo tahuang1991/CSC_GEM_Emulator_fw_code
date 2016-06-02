@@ -54,7 +54,7 @@
 //   Later replace GbE comparator readback with VME function?
 //
 //
-//  MTP Fiber Mapping to Signal Name, 
+//  MTP Fiber Mapping to Signal Name,
 //         MTP         FPGA GTX channels, Diff. Pin Numbers,         verilog name
 //    1:    Tx0-Rx0    GTX3-GTX0          AK1/AK2=Q0 - AP5/AP6=Q0     txp/n[0]-rxp/n[0]
 //    2:    Tx1-Rx1    GTX4-GTX1          AH1/AH2=Q1 - AM5/AM6=Q0     txp/n[1]-rxp/n[1]
@@ -68,7 +68,7 @@
 //    6:    Rx5        GTX5               AF5/AF6
 //    7:    Rx6        GTX6               AE3/AE4
 //    8:    Rx7        GTX7               AC3/AC4
-// 
+//
 //      QPLL 160 refclk comes into pins AB6/AB5, Quad 113 refclk 1 (Q1,C1)
 //   Q0=quad_112, Q1=quad_113, Q2=quad_114, Q3=quad_115, Q4=quad_116
 //
@@ -98,11 +98,11 @@ module CSC_GEM_Emulator (
     output        gbe_txn, gbe_txp,
     output        f_sclk,
 
-  //output        rst_qpll, 
+  //output        rst_qpll,
   //output fcs,  // fcs is not LOCed
 
 // LEDs
-  //output reg [7:0]    led_low, // this isn't loced 
+  //output reg [7:0]    led_low, // this isn't loced
     output reg [15:8]   led_hi,
     output reg [10:9]   test_led,
 
@@ -625,7 +625,7 @@ module CSC_GEM_Emulator (
 
         //Enable the correct block of ram to be read and/or written to
         assign bram_rd_en[ibram] = send_event || ((cmd_code==CMD_READ) & (bk_adr==ibram) & gtx_ready) || (pack_rd && ibram > 7);
-        assign bram_wr_en[ibram] = (cycle4 & (bk_adr==ibram) & gtx_ready) || (pack_wr && 
+        assign bram_wr_en[ibram] = (cycle4 & (bk_adr==ibram) & gtx_ready) || (pack_wr &&
             ((chm_adr == 0 && chm_fb ==0 && ibram == 0) || (chm_adr == 0 && chm_fb == 1 && ibram == 5) || (chm_adr == 1 && chm_fb ==0 && ibram == 6) || (chm_adr == 1 && chm_fb == 1 && ibram == 7)));
 
         RAMB36E1 #(
@@ -1325,13 +1325,13 @@ module CSC_GEM_Emulator (
     wire [13:0] cluster [7:0];
 
     // define vfat 2 = 1 to compile cluster packer in vfat2 mode: speeds compilation
-    `define VFAT2 1 
+    `define VFAT2 1
 
     `ifdef VFAT2
-       parameter MXSBITS = 8; 
+       parameter MXSBITS = 8;
       `define PACKER cluster_packer_vfat2
-    `else 
-       parameter MXSBITS = 64; 
+    `else
+       parameter MXSBITS = 64;
       `define PACKER cluster_packer
     `endif
 
@@ -1417,6 +1417,27 @@ module CSC_GEM_Emulator (
 // GEM + CFEB Fiber Outputs
 //----------------------------------------------------------------------------------------------------------------------
 
+  // we should cycle through these four K-codes:  BC, F7, FB, FD to serve as
+  // bunch sequence indicators.
+  // when we have more than 8 clusters detected on an OH (that is, we had S-bit
+  // overflow) we should send the "FC" K-code instead of the usual choice.
+  //---------------------------------------------------
+
+  reg [7:0] gem_frame_sep;
+  reg [1:0] gem_frame_sep_cnt=0;
+
+  always @(negedge ck40) begin
+    gem_frame_sep_cnt <= (reset) ? 0 : gem_frame_sep_cnt + 1'b1;
+  end
+	always @* begin
+      case (gem_frame_sep_cnt)
+        3'd0: gem_frame_sep = 8'hBC;
+        3'd1: gem_frame_sep = 8'hF7;
+        3'd2: gem_frame_sep = 8'hFB;
+        3'd3: gem_frame_sep = 8'hFD;
+      endcase
+	end
+
     gem_fiber_out  gem0out   (
         .RST                 (reset),                 // Manual only
         .TRG_SIGDET          (),                      // from IPAD to IBUF.  N/A?
@@ -1427,6 +1448,7 @@ module CSC_GEM_Emulator (
         .TRG_TX_P            (txp[0]),                // pick a fiber
 
         .GEM_DATA            (gem_fiber_out[0][55:0 ]),
+        .FRM_SEP             (gem_frame_sep),
         .GEM_OVERFLOW        (1'b0),
 
         .TRG_TX_REFCLK       (ck160),                 // QPLL 160 from MGT clk
@@ -1460,6 +1482,7 @@ module CSC_GEM_Emulator (
         .TRG_TX_P            (txp[5]),                // pick a fiber
 
         .GEM_DATA            (gem_fiber_out[1][55:0]),
+        .FRM_SEP             (gem_frame_sep),
         .GEM_OVERFLOW        (1'b0),
 
         .TRG_TX_REFCLK       (ck160),                 // QPLL 160 from MGT clk
@@ -1493,6 +1516,7 @@ module CSC_GEM_Emulator (
         .TRG_TX_P            (txp[6]),                // pick a fiber
 
         .GEM_DATA            (gem_fiber_out[2][55:0 ]),
+        .FRM_SEP             (gem_frame_sep),
         .GEM_OVERFLOW        (1'b0),
 
         .TRG_TX_REFCLK       (ck160),                 // QPLL 160 from MGT clk
@@ -1525,6 +1549,7 @@ module CSC_GEM_Emulator (
         .TRG_TX_P            (txp[7]),                // pick a fiber
 
         .GEM_DATA            (gem_fiber_out[3][55:0 ]),
+        .FRM_SEP             (gem_frame_sep),
         .GEM_OVERFLOW        (1'b0),
 
         .TRG_TX_REFCLK       (ck160),                 // QPLL 160 from MGT clk
@@ -1688,7 +1713,7 @@ module CSC_GEM_Emulator (
         .MON_TRG_TX_DATA     ()                          // N/A returns 32 bits
     );
 
-    wire fiberout_sump = (|tx_begin[7:0]) | (|tx_fc[7:0]) |synced_snapt; 
+    wire fiberout_sump = (|tx_begin[7:0]) | (|tx_fc[7:0]) |synced_snapt;
 
 //----------------------------------------------------------------------------------------------------------------------
 // LED Assignments
