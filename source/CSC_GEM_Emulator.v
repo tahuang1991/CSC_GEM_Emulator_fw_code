@@ -191,8 +191,8 @@ module CSC_GEM_Emulator (
     reg pack_rd = 0;
     reg pack_wr = 0;
     reg packing = 0;
-    reg chm_fb = 0;
-    reg [11:0] chm_adr;
+    reg gem_fiber = 0;
+    reg [11:0] gem_chamber;
 
     // Add-ons for Ben dCFEB testing:
     //-------------------------------
@@ -243,7 +243,7 @@ module CSC_GEM_Emulator (
     reg  [1:0]  gbe_kout      = 2'h1;
     reg  [1:0]  tx_kout       = 0;
     reg  [1:0]  tx_kout_r     = 1'b1;
-    reg           comma_align   = 0;
+    reg         comma_align   = 0;
     wire [5:0]  rxer;
     reg  [15:0] gbe_txdat     = 16'h50bc;
     reg  [15:0] tx_out;
@@ -251,7 +251,7 @@ module CSC_GEM_Emulator (
     wire [15:0] gbe_rxdat;
     reg  [15:0] l_gbe_rxdat;
     reg  [15:0] ll_gbe_rxdat;
-    reg           l_kchar       = 0;
+    reg         l_kchar       = 0;
     reg         ll_kchar;
     reg         mac_seek      = 0;
     reg         mac_sync      = 0;
@@ -613,8 +613,8 @@ module CSC_GEM_Emulator (
     assign valid_gem0 = ~&{gem_packet0[10:9],gem_packet0[24:23]};
 
     // Choose data to be written to RAM
-    assign data_in0 = packing ? (chm_fb ?       gem_packet1[31: 0]  :       gem_packet0[31: 0])  : data_iram[31: 0];
-    assign data_in1 = packing ? (chm_fb ? {8'b0,gem_packet1[55:32]} : {8'b0,gem_packet0[55:32]}) : data_iram[63:32];
+    assign data_in0 = packing ? (gem_fiber ?       gem_packet1[31: 0]  :       gem_packet0[31: 0])  : data_iram[31: 0];
+    assign data_in1 = packing ? (gem_fiber ? {8'b0,gem_packet1[55:32]} : {8'b0,gem_packet0[55:32]}) : data_iram[63:32];
 
     wire bram_rd_en[MXBRAMS-1:0];
     wire bram_wr_en[MXBRAMS-1:0];
@@ -625,8 +625,11 @@ module CSC_GEM_Emulator (
 
         //Enable the correct block of ram to be read and/or written to
         assign bram_rd_en[ibram] = send_event || ((cmd_code==CMD_READ) & (bk_adr==ibram) & gtx_ready) || (pack_rd && ibram > 7);
-        assign bram_wr_en[ibram] = (cycle4 & (bk_adr==ibram) & gtx_ready) || (pack_wr &&
-            ((chm_adr == 0 && chm_fb ==0 && ibram == 0) || (chm_adr == 0 && chm_fb == 1 && ibram == 5) || (chm_adr == 1 && chm_fb ==0 && ibram == 6) || (chm_adr == 1 && chm_fb == 1 && ibram == 7)));
+        assign bram_wr_en[ibram] = (cycle4 & (bk_adr==ibram) & gtx_ready) ||
+                                   (pack_wr && ((gem_chamber==0 && gem_fiber==0 && ibram==0) ||  // using GEM clusters to fill chamber0, fiber0
+                                                (gem_chamber==0 && gem_fiber==1 && ibram==5) ||  // using GEM clusters to fill chamber0, fiber1
+                                                (gem_chamber==1 && gem_fiber==0 && ibram==6) ||  // using GEM clusters to fill chamber1, fiber0
+                                                (gem_chamber==1 && gem_fiber==1 && ibram==7) )); // using GEM clusters to fill chamber1, fiber1
 
         RAMB36E1 #(
             .DOA_REG        (0),         // Optional output register ( 0 or 1)
@@ -1165,46 +1168,51 @@ module CSC_GEM_Emulator (
 
     always @(posedge snap_clk2) begin
         case (pack_state)
+
             2'd0: begin // Idol State
                 if(start_pack)
                 begin
-                    pack_state <= 2'd1;
-                    pack_rd <= 1'b1;
-                    packing <= 1'b1;
-                    chm_fb <= 1'b0;
-                    chm_adr <= bk_adr;
+                    pack_state  <= 2'd1;
+                    pack_rd     <= 1'b1;
+                    packing     <= 1'b1;
+                    gem_fiber   <= 1'b0;
+                    gem_chamber <= bk_adr;
                 end
             end
+
             2'd1: begin  // Read only state
-                pack_rd_adr <= pack_rd_adr + 1;
-                pack_delay <= pack_delay + 1;
-                if(pack_delay == 4'd13) begin
-                    pack_wr <= 1'b1;
+                pack_rd_adr <= pack_rd_adr + 1'b1;
+                pack_delay <= pack_delay + 1'b1;
+                if (pack_delay == 4'd13) begin
+                    pack_wr    <= 1'b1;
                     pack_state <= 2'd2;
                     pack_delay <= 4'b0;
                 end
             end
+
             2'd2: begin // Write into first fiber RAM
-                pack_rd_adr <= pack_rd_adr + 1;
-                pack_wr_adr <= pack_wr_adr + 1;
-                if(pack_wr_adr == 16'd2047) begin
-                    pack_state <= 2'd3;
+                pack_rd_adr <= pack_rd_adr + 1'b1;
+                pack_wr_adr <= pack_wr_adr + 1'b1;
+                if (pack_wr_adr==16'd2047) begin
+                    pack_state  <= 2'd3;
                     pack_wr_adr <= 16'd0;
-                    chm_fb <= 1'b1;
+                    gem_fiber   <= 1'b1;
                 end
             end
+
             2'd3: begin // Write into second fiber RAM
-                pack_rd_adr <= pack_rd_adr + 1;
-                pack_wr_adr <= pack_wr_adr + 1;
-                if(pack_wr_adr == 16'd2047) begin
-                    pack_rd <= 1'b0;
-                    pack_wr <= 1'b0;
-                    pack_state <= 2'd0;
+                pack_rd_adr <= pack_rd_adr + 1'b1;
+                pack_wr_adr <= pack_wr_adr + 1'b1;
+                if (pack_wr_adr == 16'd2047) begin
+                    pack_rd     <= 1'b0;
+                    pack_wr     <= 1'b0;
+                    pack_state  <= 2'd0;
                     pack_rd_adr <= 16'd0;
                     pack_wr_adr <= 16'd0;
-                    packing <= 1'b0;
+                    packing     <= 1'b0;
                 end
             end
+
         endcase
     end
 
@@ -1313,6 +1321,8 @@ module CSC_GEM_Emulator (
 //----------------------------------------------------------------------------------------------------------------------
 
 
+    `ifdef CLUSTER_PACKER
+
     wire [63:0] vfat_sbits [23:0];
 
     genvar ivfat;
@@ -1334,6 +1344,8 @@ module CSC_GEM_Emulator (
        parameter MXSBITS = 64;
       `define PACKER cluster_packer
     `endif
+
+    wire gem_overflow;
 
     `PACKER u_cluster_packer (
 
@@ -1367,6 +1379,8 @@ module CSC_GEM_Emulator (
         .vfat23 (vfat_sbits[23][MXSBITS-1:0]),
 
         .truncate_clusters (1'b0),
+
+        .overflow (gem_overflow),
 
         .cluster0 (cluster[0]),
         .cluster1 (cluster[1]),

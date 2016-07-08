@@ -65,8 +65,8 @@ reg         trg_txresetdone_r;
 reg         trg_txresetdone_r2;
 wire [7:0]  tx_dly_align_mon;
 wire        tx_dly_align_mon_ena;
-reg [7:0]  frm_sep;
-reg [7:0]   trgcnt;
+wire [7:0]  frm_sep;
+reg  [7:0]  trgcnt;
 reg         lt_trg;
 reg         rst_tx;
 
@@ -162,8 +162,10 @@ OBUF  #(.DRIVE(12),.IOSTANDARD("DEFAULT"),.SLEW("SLOW")) OBUF_TRG_TDIS (.O(TRG_T
 //----------------------------------------------------------------------------------------------------------------------
 
   assign out_data    = ENA_TEST_PAT ? {prbs[47:0],prbs[7:0]} : GEM_DATA;
+
 	assign trg_tx_data = rst_tx ? 32'h50BC50BC : (tx_sel ? out_data[55:24] : {out_data[23:0],frm_sep[7:0]});
-	assign trg_tx_isk  = rst_tx ?  4'b0101 :     (tx_sel ?               4'b0000     :  4'b0001);
+
+	assign trg_tx_isk  = rst_tx ?  4'b0101 : (tx_sel ? 4'b0000 : 4'b0001);
 
   // reset latches
   //---------------------------------------------------
@@ -207,12 +209,7 @@ OBUF  #(.DRIVE(12),.IOSTANDARD("DEFAULT"),.SLEW("SLOW")) OBUF_TRG_TDIS (.O(TRG_T
   // when we have more than 8 clusters detected on an OH (that is, we had S-bit
   // overflow) we should send the "FC" K-code instead of the usual choice.
   //---------------------------------------------------
-  always @* begin
-    if (GEM_OVERFLOW)
-      frm_sep = 8'hFC;
-    else
-      frm_sep = FRM_SEP;
-  end
+  assign frm_sep = (GEM_OVERFLOW) ? 8'hFC : FRM_SEP; 
 
 
 //----------------------------------------------------------------------------------------------------------------------
