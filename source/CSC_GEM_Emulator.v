@@ -312,7 +312,7 @@ module CSC_GEM_Emulator (
 
 
 //----------------------------------------------------------------------------------------------------------------------
-// Clock Generation
+// Phase Shifted Clock Generation
 //----------------------------------------------------------------------------------------------------------------------
 
     // lhc clock from tmb baseboard
@@ -501,8 +501,9 @@ module CSC_GEM_Emulator (
     wire [55:0] gem_packet0;
     wire [55:0] gem_packet1;
 
-    reg [55:0] gem_fiber_out [3:0];
-    reg [47:0] cfeb_fiber_out[3:0];
+    reg [55:0] gem_fiber_out  [3:0];
+    reg [47:0] cfeb_fiber_out [3:0];
+
     always @(negedge ck40) begin  // 80 MHz derived from GTX_TxPLL
         gem_fiber_out[0][55:0]  <= (send_event) ? data_oram[0][55:0] : 56'hffffffffffffff;
         gem_fiber_out[1][55:0]  <= (send_event) ? data_oram[5][55:0] : 56'hffffffffffffff;
@@ -1345,7 +1346,6 @@ module CSC_GEM_Emulator (
       `define PACKER cluster_packer
     `endif
 
-    wire gem_overflow;
 
     `PACKER u_cluster_packer (
 
@@ -1431,161 +1431,62 @@ module CSC_GEM_Emulator (
 // GEM + CFEB Fiber Outputs
 //----------------------------------------------------------------------------------------------------------------------
 
-  // we should cycle through these four K-codes:  BC, F7, FB, FD to serve as
-  // bunch sequence indicators.
-  // when we have more than 8 clusters detected on an OH (that is, we had S-bit
-  // overflow) we should send the "FC" K-code instead of the usual choice.
-  //---------------------------------------------------
+	wire [3:0] gem_tx_p; 
+	wire [3:0] gem_tx_n; 
 
-  reg [7:0] gem_frame_sep;
-  reg [1:0] gem_frame_sep_cnt=0;
+	assign txp[0]= gem_tx_p[0] ;
+	assign txn[0]= gem_tx_n[0] ;
 
-  always @(negedge ck40) begin
-    gem_frame_sep_cnt <= (reset) ? 0 : gem_frame_sep_cnt + 1'b1;
-  end
-	always @* begin
-      case (gem_frame_sep_cnt)
-        3'd0: gem_frame_sep = 8'hBC;
-        3'd1: gem_frame_sep = 8'hF7;
-        3'd2: gem_frame_sep = 8'hFB;
-        3'd3: gem_frame_sep = 8'hFD;
-      endcase
+	assign txp[5]= gem_tx_p[1] ;
+	assign txn[5]= gem_tx_n[1] ;
+
+	assign txp[6]= gem_tx_p[2] ;
+	assign txn[6]= gem_tx_n[2] ;
+
+	assign txp[7]= gem_tx_p[3] ;
+	assign txn[7]= gem_tx_n[3] ;
+
+	wire [3:0] gem_tx_out_clk;
+	wire [3:0] gem_tx_pll_locked;
+
+	wire gem_overflow;
+	wire mgt_refclk = ck160;
+	wire usrclk     = snap_clk2;
+	wire usrclk2    = tx_clk;
+
+	genvar igem;
+	generate
+	for (igem=0; igem<4; igem=igem+1'b1) begin: gemgen
+	gem_fiber_out  gem_fibers_out   (
+		.RST                 (1'b0),           // Manual only
+		.TRG_SIGDET          (),               // from IPAD to IBUF.  N/A?
+		.TRG_TDIS            (),               // OBUF output, for what?  N/A?
+		.TRG_TX_P            (gem_tx_p[igem]), // pick a fiber
+		.TRG_TX_N            (gem_tx_n[igem]), // pick a fiber
+
+		.GEM_DATA            (gem_fiber_out[igem][55:0]),
+		.GEM_OVERFLOW        (gem_overflow),
+
+		.TRG_TX_REFCLK       (mgt_refclk),              // QPLL 160 from MGT clk
+		.TRG_TXUSRCLK        (usrclk),                  // get 160 from TXOUTCLK (times 2)
+		.TRG_CLK80           (usrclk2),                 // get 80 from TXOUTCLK
+		.TRG_GTXTXRST        (1'b0),                    // maybe Manual "reset" only
+		.TRG_TX_PLLRST       (txpll_rst),               // Tie LOW.
+		.TRG_RST             (fiber_reset),             // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
+		.ENA_TEST_PAT        (1'b0),                    // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
+		.INJ_ERR             (1'b0),                    // use my switch/PB combo logic for this, high-true? Pulse high once.
+		.TRG_TXOUTCLK        (gem_tx_out_clk[igem]),    // 80 MHz; This has to go to MCM to generate 160/80
+		.TRG_TX_PLL_LOCK     (gem_tx_pll_locked[igem]), // inverse holds the MCM in Reset; Tx GTX PLL Ref lock
+		.TRG_TXRESETDONE     (),                        // N/A
+		.TX_SYNC_DONE        (),                        // not used in DCFEB tests
+		.STRT_LTNCY          (),                        // after every Reset, to TP for debug only  -- !sw7 ?
+		.LTNCY_TRIG          (),                        // bring out to TP.  Signals when TX sends "FC" (once every 128 BX).  Send raw to TP  --sw8,7
+		.MON_TX_SEL          (),                        // N/A
+		.MON_TRG_TX_ISK      (),                        // N/A returns 4 bits
+		.MON_TRG_TX_DATA     ()                         // N/A returns 32 bits
+	);
 	end
-
-    gem_fiber_out  gem0out   (
-        .RST                 (reset),                 // Manual only
-        .TRG_SIGDET          (),                      // from IPAD to IBUF.  N/A?
-        .TRG_RX_N            (),                      // empty
-        .TRG_RX_P            (),                      // empty
-        .TRG_TDIS            (),                      // OBUF output, for what?  N/A?
-        .TRG_TX_N            (txn[0]),                // pick a fiber
-        .TRG_TX_P            (txp[0]),                // pick a fiber
-
-        .GEM_DATA            (gem_fiber_out[0][55:0 ]),
-        .FRM_SEP             (gem_frame_sep),
-        .GEM_OVERFLOW        (1'b0),
-
-        .TRG_TX_REFCLK       (ck160),                 // QPLL 160 from MGT clk
-        .TRG_TXUSRCLK        (snap_clk2),             // get 160 from TXOUTCLK (times 2)
-        .TRG_CLK80           (tx_clk),                // get 80 from TXOUTCLK
-        .TRG_GTXTXRST        (1'b0     ),             // maybe Manual "reset" only
-        .TRG_TX_PLLRST       (txpll_rst),             // Tie LOW.
-        .TRG_RST             (fiber_reset),           // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        .ENA_TEST_PAT        (1'b0),                  // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-      //.ENA_TEST_PAT        (sw[8]),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-        .INJ_ERR             (ferr_f[0] & sw[8]),     // use my switch/PB combo logic for this, high-true? Pulse high once.
-        .TRG_SD              (),                      // from IBUF, useless output. N/A
-        .TRG_TXOUTCLK        (),                      // 80 MHz; This has to go to MCM to generate 160/80
-        .TRG_TX_PLL_LOCK     (),                      // inverse holds the MCM in Reset; Tx GTX PLL Ref lock
-        .TRG_TXRESETDONE     (),                      // N/A
-        .TX_SYNC_DONE        (),                      // not used in DCFEB tests
-        .STRT_LTNCY          (tx_begin[0]),           // after every Reset, to TP for debug only  -- !sw7 ?
-        .LTNCY_TRIG          (tx_fc[0]),              // bring out to TP.  Signals when TX sends "FC" (once every 128 BX).  Send raw to TP  --sw8,7
-        .MON_TX_SEL          (),                      // N/A
-        .MON_TRG_TX_ISK      (),                      // N/A returns 4 bits
-        .MON_TRG_TX_DATA     ()                       // N/A returns 32 bits
-    );
-
-    gem_fiber_out  gem1out   (
-        .RST                 (reset),                 // Manual only
-        .TRG_SIGDET          (),                      // from IPAD to IBUF.  N/A?
-        .TRG_RX_N            (),                      // empty
-        .TRG_RX_P            (),                      // empty
-        .TRG_TDIS            (),                      // OBUF output, for what?  N/A?
-        .TRG_TX_N            (txn[5]),                // pick a fiber
-        .TRG_TX_P            (txp[5]),                // pick a fiber
-
-        .GEM_DATA            (gem_fiber_out[1][55:0]),
-        .FRM_SEP             (gem_frame_sep),
-        .GEM_OVERFLOW        (1'b0),
-
-        .TRG_TX_REFCLK       (ck160),                 // QPLL 160 from MGT clk
-        .TRG_TXUSRCLK        (snap_clk2),             // get 160 from TXOUTCLK (times 2)
-        .TRG_CLK80           (tx_clk),                // get 80 from TXOUTCLK
-        .TRG_GTXTXRST        (1'b0     ),             // maybe Manual "reset" only
-        .TRG_TX_PLLRST       (txpll_rst),             // Tie LOW.
-        .TRG_RST             (fiber_reset),           // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        .ENA_TEST_PAT        (1'b0),                  // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-      //.ENA_TEST_PAT        (sw[8]),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-        .INJ_ERR             (ferr_f[5] & sw[8]),     // use my switch/PB combo logic for this, high-true? Pulse high once.
-        .TRG_SD              (),                      // from IBUF, useless output. N/A
-        .TRG_TXOUTCLK        (),                      // 80 MHz; This has to go to MCM to generate 160/80
-        .TRG_TX_PLL_LOCK     (),                      // inverse holds the MCM in Reset; Tx GTX PLL Ref lock
-        .TRG_TXRESETDONE     (),                      // N/A
-        .TX_SYNC_DONE        (),                      // not used in DCFEB tests
-        .STRT_LTNCY          (tx_begin[5]),           // after every Reset, to TP for debug only  -- !sw7 ?
-        .LTNCY_TRIG          (tx_fc[5]),              // bring out to TP.  Signals when TX sends "FC" (once every 128 BX).  Send raw to TP  --sw8,7
-        .MON_TX_SEL          (),                      // N/A
-        .MON_TRG_TX_ISK      (),                      // N/A returns 4 bits
-        .MON_TRG_TX_DATA     ()                       // N/A returns 32 bits
-    );
-
-    gem_fiber_out  gem2out   (
-        .RST                 (reset),                 // Manual only
-        .TRG_SIGDET          (),                      // from IPAD to IBUF.  N/A?
-        .TRG_RX_N            (),                      // empty
-        .TRG_RX_P            (),                      // empty
-        .TRG_TDIS            (),                      // OBUF output, for what?  N/A?
-        .TRG_TX_N            (txn[6]),                // pick a fiber
-        .TRG_TX_P            (txp[6]),                // pick a fiber
-
-        .GEM_DATA            (gem_fiber_out[2][55:0 ]),
-        .FRM_SEP             (gem_frame_sep),
-        .GEM_OVERFLOW        (1'b0),
-
-        .TRG_TX_REFCLK       (ck160),                 // QPLL 160 from MGT clk
-        .TRG_TXUSRCLK        (snap_clk2),             // get 160 from TXOUTCLK (times 2)
-        .TRG_CLK80           (tx_clk),                // get 80 from TXOUTCLK
-        .TRG_GTXTXRST        (1'b0     ),             // maybe Manual "reset" only
-        .TRG_TX_PLLRST       (txpll_rst),             // Tie LOW.
-        .TRG_RST             (fiber_reset),           // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        .ENA_TEST_PAT        (1'b0),                  // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-      //.ENA_TEST_PAT        (sw[8]),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-        .INJ_ERR             (ferr_f[6] & sw[8]),     // use my switch/PB combo logic for this, high-true? Pulse high once.
-        .TRG_SD              (),                      // from IBUF, useless output. N/A
-        .TRG_TXOUTCLK        (),                      // 80 MHz; This has to go to MCM to generate 160/80
-        .TRG_TX_PLL_LOCK     (),                      // inverse holds the MCM in Reset; Tx GTX PLL Ref lock .TRG_TXRESETDONE(), // N/A
-        .TX_SYNC_DONE        (),                      // not used in DCFEB tests
-        .STRT_LTNCY          (tx_begin[6]),           // after every Reset, to TP for debug only  -- !sw7 ?
-        .LTNCY_TRIG          (tx_fc[6]),              // bring out to TP.  Signals when TX sends "FC" (once every 128 BX).  Send raw to TP  --sw8,7
-        .MON_TX_SEL          (),                      // N/A
-        .MON_TRG_TX_ISK      (),                      // N/A returns 4 bits
-        .MON_TRG_TX_DATA     ()                       // N/A returns 32 bits
-    );
-
-    gem_fiber_out  gem3out   (
-        .RST                 (reset),                 // Manual only
-        .TRG_SIGDET          (),                      // from IPAD to IBUF.  N/A?
-        .TRG_RX_N            (),                      // empty
-        .TRG_RX_P            (),                      // empty
-        .TRG_TDIS            (),                      // OBUF output, for what?  N/A?
-        .TRG_TX_N            (txn[7]),                // pick a fiber
-        .TRG_TX_P            (txp[7]),                // pick a fiber
-
-        .GEM_DATA            (gem_fiber_out[3][55:0 ]),
-        .FRM_SEP             (gem_frame_sep),
-        .GEM_OVERFLOW        (1'b0),
-
-        .TRG_TX_REFCLK       (ck160),                 // QPLL 160 from MGT clk
-        .TRG_TXUSRCLK        (snap_clk2),             // get 160 from TXOUTCLK (times 2)
-        .TRG_CLK80           (tx_clk),                // get 80 from TXOUTCLK
-        .TRG_GTXTXRST        (1'b0     ),             // maybe Manual "reset" only
-        .TRG_TX_PLLRST       (txpll_rst),             // Tie LOW.
-        .TRG_RST             (fiber_reset),           // gtx_reset =  PBrst | !TxSyncDone | !RxSyncDone
-        .ENA_TEST_PAT        (1'b0),                  // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-      //.ENA_TEST_PAT        (sw[8]),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
-        .INJ_ERR             (ferr_f[7] & sw[8]),     // use my switch/PB combo logic for this, high-true? Pulse high once.
-        .TRG_SD              (),                      // from IBUF, useless output. N/A
-        .TRG_TXOUTCLK        (),                      // 80 MHz; This has to go to MCM to generate 160/80
-        .TRG_TX_PLL_LOCK     (),                      // inverse holds the MCM in Reset; Tx GTX PLL Ref lock
-        .TRG_TXRESETDONE     (),                      // N/A
-        .TX_SYNC_DONE        (),                      // not used in DCFEB tests
-        .STRT_LTNCY          (tx_begin[7]),           // after every Reset, to TP for debug only  -- !sw7 ?
-        .LTNCY_TRIG          (tx_fc[7]),              // bring out to TP.  Signals when TX sends "FC" (once every 128 BX).  Send raw to TP  --sw8,7
-        .MON_TX_SEL          (),                      // N/A
-        .MON_TRG_TX_ISK      (),                      // N/A returns 4 bits
-        .MON_TRG_TX_DATA     ()                       // N/A returns 32 bits
-    );
+	endgenerate
 
     dcfeb_fiber_out  dcfeb0out (
         .RST                 (reset),                    // Manual only

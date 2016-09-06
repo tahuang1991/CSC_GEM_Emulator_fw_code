@@ -66,9 +66,9 @@ reg         trg_txresetdone_r;
 reg         trg_txresetdone_r2;
 wire [7:0]  tx_dly_align_mon;
 wire        tx_dly_align_mon_ena;
-reg [15:0]  frm_sep;
-reg [7:0]   trgcnt;
-reg         lt_trg;
+wire [15:0] frm_sep;
+reg  [7:0]  trgcnt;
+wire        lt_trg;
 reg         rst_tx;
 
 
@@ -169,38 +169,21 @@ OBUF  #(.DRIVE(12),.IOSTANDARD("DEFAULT"),.SLEW("SLOW")) OBUF_TRG_TDIS (.O(TRG_T
 	assign trg_tx_isk  = rst_tx ?  4'b0101 :     (tx_sel ?               4'b0000     :  4'b0001);
 
 	always @(posedge TRG_CLK80) begin
-		rst_tx <= TRG_RST;
+		rst_tx     <= TRG_RST;
 		LTNCY_TRIG <= lt_trg;
 	end
-	always @(posedge TRG_CLK80 or posedge TRG_RST) begin
-		if(TRG_RST) begin
-			tx_sel     <= 1'b1;
-			tx_sel_bar <= 1'b1;
-		end
-		else begin
-			tx_sel     <= ~tx_sel;
-			tx_sel_bar <=  tx_sel;
-		end
+
+	always @(posedge TRG_CLK80) begin
+    tx_sel     <= TRG_RST ? 1'b1 : ~tx_sel; 
+    tx_sel_bar <= TRG_RST ? 1'b1 :  tx_sel; 
 	end
 
-	always @(posedge TRG_CLK80 or posedge rst_tx) begin
-		if(rst_tx) begin
-			trgcnt <= 8'h00;
-		end
-		else begin
-			trgcnt <= trgcnt+1'b1;
-		end
+	always @(posedge TRG_CLK80) begin
+    trgcnt <= (rst_tx) ? (8'h0) : (trgcnt+1'b1); 
 	end
-	always @* begin
-		if(!rst_tx && (trgcnt==8'h00)) begin
-			frm_sep = 16'h50FC;
-			lt_trg  = 1'b1;
-		end
-		else begin
-			frm_sep = 16'h50BC;
-			lt_trg  = 1'b0;
-		end
-	end
+
+  assign lt_trg  = (!rst_tx && (trgcnt==8'h00)); 
+  assign frm_sep = (lt_trg) ? 16'h50FC : 16'h50BC; 
 
 
 //----------------------------------------------------------------------------------------------------------------------
