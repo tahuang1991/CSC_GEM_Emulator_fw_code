@@ -39,7 +39,7 @@ The code is from https://github.com/andrewpeck/emulator_fw/tree/master
 
 ## functionalities
  
-###Function1
+### Function1
 ```
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""
 Building CLCT patterns
@@ -57,7 +57,7 @@ Building CLCT patterns
 
 
 
-###Function2
+### Function2
 ```
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""
 Block RAM read and write control
@@ -75,7 +75,7 @@ Block RAM read and write control
 
 
 
-###Function3
+### Function3
 ```
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""
 GigaBit Ethernet Transceiver
@@ -91,8 +91,26 @@ GigaBit Ethernet Transceiver
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""
 ```
 
+### Function4
 
-###Function4
+```
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+Pack Vfat Sbits into GEM clusters, 24 VFATs to 8 cluster per chamber
+  clock:
+   
+  led:
+
+  input:  24 vfat Sbits which are stored in DRAM before packing
+
+
+  output: 8 GEM cluster per GEM layer
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+```
+
+
+
+### Function5
 
 ```
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""
@@ -101,10 +119,10 @@ Sending out patterns to TMB
    
   led:
 
-  input:
+  input: 4 DCFEB fibers and 4 GEM fibers. 4 DCFEB fibers coded comparator digis from 4DCFEBs. 4 GEM fibers coded GEM clusters from GE1/1
 
 
-  output:
+  output: data transmitted to OTMB
 
 
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""
