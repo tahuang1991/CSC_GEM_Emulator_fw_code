@@ -10,8 +10,8 @@ This version of GEMCSC emulator originated from TAMU development back to 2014 an
 The code is from https://github.com/andrewpeck/emulator_fw/tree/testattamu
 
 ### fibers in CSC_GEM_Emulator_fw_code
-* fiber0 --> GEM fiber1 (counting from 1)
-* fiber1 --> DCFEB 1 (counting from 1)
+* fiber0 --> GEM fiber1 (counting from 1), 56 bits (4 clusters) per clock
+* fiber1 --> DCFEB 1 (counting from 1) 48 bits(8bits per layer and 6 layers per fiber) per clock
 * fiber2 --> DCFEB 2
 * fiber3 --> DCFEB 3
 * fiber4 --> DCFEB 4
