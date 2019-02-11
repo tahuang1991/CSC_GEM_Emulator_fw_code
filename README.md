@@ -4,20 +4,20 @@ CSC_GEM_Emulator_fw_code is developed to read or write/send GEM/CSC data from/to
 
 
 
-This version of GEMCSC emulator originated from TAMU development back to 2014 and later Andrew continues to work on it by removing obsolete code and adding GEM features like GEM cluster packer, GEM fibers
+This version of GEMCSC emulator originated from TAMU development back to 2014 and later Andrew continued to work on it by removing obsolete code and adding GEM features like GEM cluster packer, GEM fibers
 
 
 The code is from https://github.com/andrewpeck/emulator_fw/tree/master
 
 ### fibers in CSC_GEM_Emulator_fw_code
-fiber0 --> GEM fiber1 (counting from 1)
-fiber1 --> DCFEB 1 (counting from 1)
-fiber2 --> DCFEB 2
-fiber3 --> DCFEB 3
-fiber4 --> DCFEB 4
-fiber5 --> GEM fiber2 
-fiber6 --> GEM fiber3 
-fiber7 --> GEM fiber4 
+* fiber0 --> GEM fiber1 (counting from 1)
+* fiber1 --> DCFEB 1 (counting from 1)
+* fiber2 --> DCFEB 2
+* fiber3 --> DCFEB 3
+* fiber4 --> DCFEB 4
+* fiber5 --> GEM fiber2 
+* fiber6 --> GEM fiber3 
+* fiber7 --> GEM fiber4 
 
 ### commands
 
@@ -33,3 +33,80 @@ fiber7 --> GEM fiber4
 
     parameter EOF         = 16'hf7fd; // 16'b1111011111111101
 ```
+
+
+
+
+## functionalities
+ 
+###Function1
+```
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+Building CLCT patterns
+ clock:
+      ck40, negedge ck40
+ led: 
+     
+ input:   // variables to init and control this function
+      clct_pattern. control which patterns to be built 
+ output:  //variables as results of this function 
+      triad_word_l*, encode clct patterns
+      
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+```
+
+
+
+###Function2
+```
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+Block RAM read and write control
+ clock:
+       gbe_txclk2, for bother reading and writing 
+ led:
+ 
+ input:
+     inputs from RAMB36E1
+ output:
+     outputs from RAMB36E1
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+```
+
+
+
+###Function3
+```
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+GigaBit Ethernet Transceiver
+  clock:
+       inputs in submodule.
+
+  led:
+   
+  input:
+
+  output:
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+```
+
+
+###Function4
+
+```
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+Sending out patterns to TMB
+  clock:
+   
+  led:
+
+  input:
+
+
+  output:
+
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+```
+
