@@ -15,9 +15,9 @@ The code is from https://github.com/andrewpeck/emulator_fw/tree/testattamu
 * fiber2 --> DCFEB 2
 * fiber3 --> DCFEB 3
 * fiber4 --> DCFEB 4
-* fiber5 --> DCFEB 5 
-* fiber6 --> DCFEB 6 
-* fiber7 --> DCFEB 7 
+* fiber5 --> GEM fiber2 
+* fiber6 --> GEM fiber3
+* fiber7 --> GEM fiber4
 
 ### commands
 
