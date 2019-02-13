@@ -16,11 +16,11 @@ NET "led_hi[9]"     LOC  = H23;
 #NET "led_low[5]"   LOC  = H25;
 #NET "led_low[6]"   LOC  = P24;
 #NET "led_low[7]"   LOC  = R24;
-#NET "rst_qpll"     LOC  = U30;
-#NET "qpll_lock"    LOC  = M22;
+NET "rst_qpll"     LOC  = U30;
+NET "qpll_lock"    LOC  = M22;
 NET "tmb_clock0"    LOC  = B31; # LHC_Clk  io_600
 # NET "tmb_clock1"  LOC  = K24; # GCLK1_6P
-#NET "fcs"          LOC  = Y24; # drive FCS HIGH for compatibility with Mezz 2012.
+NET "fcs"          LOC  = Y24; # drive FCS HIGH for compatibility with Mezz 2012.
 
 NET "pb" LOC = V29;
 NET "pb" CLOCK_DEDICATED_ROUTE = FALSE;
