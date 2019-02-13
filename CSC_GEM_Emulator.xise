@@ -109,7 +109,7 @@
     <file xil_pn:name="source/gem_test_ucf_simlified.ucf" xil_pn:type="FILE_UCF">
       <association xil_pn:name="Implementation" xil_pn:seqID="0"/>
     </file>
-    <file xil_pn:name="source/README.txt" xil_pn:type="FILE_USERDOC"/>
+    <file xil_pn:name="README.md" xil_pn:type="FILE_USERDOC"/>
     <file xil_pn:name="source/tx_sync.v" xil_pn:type="FILE_VERILOG">
       <association xil_pn:name="BehavioralSimulation" xil_pn:seqID="0"/>
       <association xil_pn:name="Implementation" xil_pn:seqID="3"/>

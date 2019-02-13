@@ -101,7 +101,7 @@ Sending out patterns to TMB
    
   led:
 
-  input: 7 DCFEB fibers and 1 GEM fibers. 7 DCFEB fibers coded comparator digis from 4DCFEBs. 1 GEM fibers coded 4 GEM clusters
+  input: 4 DCFEB Triads data and 4 GEM cluster, 4 DCFEB fibers coded comparator digis from 4DCFEBs. 4 GEM fibers coded 4 GEM clusters
 
 
   output: data transmitted to OTMB
