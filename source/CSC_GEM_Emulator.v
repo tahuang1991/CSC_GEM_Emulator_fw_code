@@ -487,7 +487,7 @@ module CSC_GEM_Emulator (
     wire [55:0] gem_data_mux = sw[8] ? 56'hfeedadeadabeef : 56'h00000000000000;
 
     reg [55:0] gem_fiber_out [NumGEMFibers-1:0];
-    reg [47:0] cfeb_fiber_out[NumCSCFibers-1:0];
+    reg [47:0] cfeb_fiber_out[NumCSCFibers:1];
     always @(negedge ck40) begin  // 80 MHz derived from GTX_TxPLL
          gem_fiber_out[0][55:0] <= (send_event) ? data_oram[0][55:0] : 56'hffffffffffffff;
          gem_fiber_out[1][55:0] <= (send_event) ? data_oram[5][55:0] : 56'hffffffffffffff;
