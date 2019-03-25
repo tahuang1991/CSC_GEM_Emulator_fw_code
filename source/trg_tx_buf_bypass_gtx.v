@@ -520,7 +520,7 @@ module TRG_TX_BUF_BYPASS_GTX #
         .TXUSRCLK2                      (TXUSRCLK2_IN),
         //-------------- Transmit Ports - TX Driver and OOB signaling --------------
         .TXBUFDIFFCTRL                  (3'b100),
-        .TXDIFFCTRL                     (4'b0111),
+        .TXDIFFCTRL                     (4'b1110),//Tao, 0111->1100, increase light strength
         .TXINHIBIT                      (tied_to_ground_i),
         .TXN                            (TXN_OUT),
         .TXP                            (TXP_OUT),
