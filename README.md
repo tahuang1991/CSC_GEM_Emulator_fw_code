@@ -19,6 +19,9 @@ The code is from https://github.com/andrewpeck/emulator_fw/tree/testattamu
 * fiber6 --> DCFEB 6 
 * fiber7 --> DCFEB 7 
 
+### version control
+ 2019 March 24, TXDIFFCTRL is changed from 4'b0111 into 4'b1110 to increase differential signal amplitude as firefly in new OTMB may be more sensitive to it. Tao
+
 ### commands
 
 ```
