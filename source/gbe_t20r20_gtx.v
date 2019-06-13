@@ -555,7 +555,7 @@ module GBE_T20R20_GTX # (
             .TXUSRCLK2                      (TXUSRCLK2_IN),
             //-------------- Transmit Ports - TX Driver and OOB signaling --------------
             .TXBUFDIFFCTRL                  (3'b100),
-            .TXDIFFCTRL                     (4'b0000),
+            .TXDIFFCTRL                     (4'b1001),//Tao, changed into 4'b1001
             .TXINHIBIT                      (tied_to_ground_i),
             .TXN                            (TXN_OUT),
             .TXP                            (TXP_OUT),

@@ -129,7 +129,12 @@ NET "ckgbe" TNM_NET = "clock_gbe";
 TIMESPEC "TS_clock_gbe" = PERIOD "clock_gbe" 8 ns HIGH 50%;
 
 # location for gbe mgt: gtx19
-NET "gbe_txn" LOC = A4 | IOSTANDARD = "LVDS_25";
-NET "gbe_txp" LOC = A3 | IOSTANDARD = "LVDS_25";
-NET "gbe_rxn" LOC = B6 | IOSTANDARD = "LVDS_25";
-NET "gbe_rxp" LOC = B5 | IOSTANDARD = "LVDS_25";
+#NET "gbe_txn" LOC = A4 | IOSTANDARD = "LVDS_25";
+#NET "gbe_txp" LOC = A3 | IOSTANDARD = "LVDS_25";
+#NET "gbe_rxn" LOC = B6 | IOSTANDARD = "LVDS_25";
+#NET "gbe_rxp" LOC = B5 | IOSTANDARD = "LVDS_25";
+#below is for 2019 emulator board
+NET "gbe_txn" LOC = M2 | IOSTANDARD = "LVDS_25";   #was A4
+NET "gbe_txp" LOC = M1 | IOSTANDARD = "LVDS_25";   #was A3
+NET "gbe_rxn" LOC = N4 | IOSTANDARD = "LVDS_25";   #was B6
+NET "gbe_rxp" LOC = N3 | IOSTANDARD = "LVDS_25";   #was B5
