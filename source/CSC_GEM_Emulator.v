@@ -1294,11 +1294,12 @@ module CSC_GEM_Emulator (
         begin
             if (reset) begin
                 overflow_cnt <= 4'b0;
+                gem_overflow_reg = 4'b0;
             end
             else begin 
-                overflow_cnt <= overflow_cnt + 4'b1;
-                //force one overflow error in GEM fiber3 every 32-1
-                if (overflow_cnt == 4'b1111) gem_overflow_reg[3] = 1'b1;
+                //force one overflow error in GEM fiber3 every 32 DUMPs
+                overflow_cnt <= (cmd_code==CMD_DUMP) ? overflow_cnt + 4'b1 : overflow_cnt;
+                gem_overflow_reg[3] <= (overflow_cnt == 4'b1111) ? 1'b1 : 1'b0;
             end
         end
 
@@ -1502,6 +1503,7 @@ x_flashsm #(22) led3 (.trigger(gbe_rxdat==CMD_WRITE), .hold(1'b0), .clock(gbe_tx
 x_flashsm #(22) led4 (.trigger(gem_sync[0]),   .hold(1'b0), .clock(gbe_txclk2), .out(gem_sync0_led));
 x_flashsm #(22) led5 (.trigger(gem_sync[1]),   .hold(1'b0), .clock(gbe_txclk2), .out(gem_sync1_led));
 x_flashsm #(22) led6 (.trigger(gems_sync),   .hold(1'b0), .clock(gbe_txclk2), .out(gems_sync_led));
+x_flashsm #(22) led6 (.trigger(|gem_overflow),   .hold(1'b0), .clock(gbe_txclk2), .out(gems_overflow_led));
 
     wire sump = gbe_sump | fiberout_sump | clk_sump;
 
@@ -1523,10 +1525,11 @@ x_flashsm #(22) led6 (.trigger(gems_sync),   .hold(1'b0), .clock(gbe_txclk2), .o
         //led_hi[12] = ~ (1'b0 ^ loading_bram_led2 ); //!dump_enable_rr         ; // 12.5 usec   //
         //led_hi[13] = ~ (1'b0 ^ loading_bram_done ); //!dump_enable_r          ; // 12.5 usec   // (locked & lhc_locked)    ; // 1
         //led_hi[14] = ~ (1'b0 ^ 1'b0              ); //!dump_enable            ; // 12.5 usec
+        //led_hi[15] = ~ (1'b0 ^ loading_bram_led  ); //!dump_done              ; // 50ns
         led_hi[12] = ~ (1'b0 ^ gem_sync0_led);
         led_hi[13] = ~ (1'b0 ^ gem_sync1_led);
         led_hi[14] = ~ (1'b0 ^ gems_sync_led);
-        led_hi[15] = ~ (1'b0 ^ loading_bram_led  ); //!dump_done              ; // 50ns
+        led_hi[15] = ~ (1'b0 ^ gems_overflow_led  ); //!dump_done              ; // 50ns
 
         test_led[9]   = lhc_ck;
         test_led[10]  = 1'b0;
