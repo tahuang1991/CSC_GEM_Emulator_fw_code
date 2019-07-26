@@ -1503,7 +1503,7 @@ x_flashsm #(22) led3 (.trigger(gbe_rxdat==CMD_WRITE), .hold(1'b0), .clock(gbe_tx
 x_flashsm #(22) led4 (.trigger(gem_sync[0]),   .hold(1'b0), .clock(gbe_txclk2), .out(gem_sync0_led));
 x_flashsm #(22) led5 (.trigger(gem_sync[1]),   .hold(1'b0), .clock(gbe_txclk2), .out(gem_sync1_led));
 x_flashsm #(22) led6 (.trigger(gems_sync),   .hold(1'b0), .clock(gbe_txclk2), .out(gems_sync_led));
-x_flashsm #(22) led6 (.trigger(|gem_overflow),   .hold(1'b0), .clock(gbe_txclk2), .out(gems_overflow_led));
+x_flashsm #(22) led7 (.trigger(|gem_overflow),   .hold(1'b0), .clock(gbe_txclk2), .out(gems_overflow_led));
 
     wire sump = gbe_sump | fiberout_sump | clk_sump;
 
