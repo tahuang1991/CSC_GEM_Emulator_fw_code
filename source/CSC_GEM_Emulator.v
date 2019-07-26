@@ -1297,9 +1297,9 @@ module CSC_GEM_Emulator (
                 gem_overflow_reg <= 4'b0;
             end
             else begin 
-                //force one overflow error in GEM fiber3 every 32 DUMPs
-                overflow_cnt <= (cmd_code==CMD_DUMP) ? overflow_cnt + 4'b1 : overflow_cnt;
-                gem_overflow_reg[3] <= (overflow_cnt == 4'b1111) ? 1'b1 : 1'b0;
+                //force one overflow error in GEM fiber3 every 16 DUMPs
+                overflow_cnt <= (overflow_cnt == 4'b1111 && send_event) ? 4'b0 : ((send_event) ? overflow_cnt + 4'b1 : overflow_cnt);
+                gem_overflow_reg[3] <= (overflow_cnt == 4'b1111 && send_event) ? 1'b1 : 1'b0;
             end
         end
 
