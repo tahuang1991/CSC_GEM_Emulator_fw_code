@@ -1282,24 +1282,26 @@ module CSC_GEM_Emulator (
 
         wire [7:0] gem_frame [NumGEMFibers-1:0];
 
-	wire [NumGEMFibers-1:0]gem_overflow = 4'b0;
+        reg  [NumGEMFibers-1:0] gem_overflow_reg = 4'b0;
+	wire [NumGEMFibers-1:0]gem_overflow;
+        assign gem_overflow = gem_overflow_reg;
 	wire mgt_refclk = ck160;
 	wire usrclk     = snap_clk2;
 	wire usrclk2    = tx_clk;
 
-        reg [3:0] overflow_cnt; 
-        always @(posedge tx_clk) // everything that uses lhc_clk w/simple Reset
+        reg [3:0] overflow_cnt = 0; 
+        always @(posedge tx_clk) // 
         begin
             if (reset) begin
                 overflow_cnt <= 4'b0;
             end
             else begin 
                 overflow_cnt <= overflow_cnt + 4'b1;
+                //force one overflow error in GEM fiber3 every 32-1
+                if (overflow_cnt == 4'b1111) gem_overflow_reg[3] = 1'b1;
             end
         end
 
-        //force one overflow error in GEM fiber3 every 16
-        if (overflow_cnt == 4'b1111) gem_overflow[3] = 1'b1;
 
 
 	genvar igem;
