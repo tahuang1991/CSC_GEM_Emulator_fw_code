@@ -1283,7 +1283,7 @@ module CSC_GEM_Emulator (
         wire [7:0] gem_frame [NumGEMFibers-1:0];
 
         reg  [NumGEMFibers-1:0] gem_overflow_reg = 4'b0;
-	wire [NumGEMFibers-1:0]gem_overflow;
+	wire [NumGEMFibers-1:0] gem_overflow;
         assign gem_overflow = gem_overflow_reg;
 	wire mgt_refclk = ck160;
 	wire usrclk     = snap_clk2;
@@ -1294,7 +1294,7 @@ module CSC_GEM_Emulator (
         begin
             if (reset) begin
                 overflow_cnt <= 4'b0;
-                gem_overflow_reg = 4'b0;
+                gem_overflow_reg <= 4'b0;
             end
             else begin 
                 //force one overflow error in GEM fiber3 every 32 DUMPs
