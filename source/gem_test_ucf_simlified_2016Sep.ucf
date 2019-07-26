@@ -1,0 +1,141 @@
+NET "gtl_loop" LOC = G21; #  io_[309]
+
+NET "led_hi[8]"     LOC  = G23;
+NET "led_hi[9]"     LOC  = H23;
+NET "led_hi[10]"    LOC  = N24;
+NET "led_hi[11]"    LOC  = N23;
+NET "led_hi[12]"    LOC  = F23;
+NET "led_hi[13]"    LOC  = F24;
+NET "led_hi[14]"    LOC  = L24;
+NET "led_hi[15]"    LOC  = M23;
+NET "led_low[0]"   LOC  = AF24;
+NET "led_low[1]"   LOC  = AF25;
+NET "led_low[2]"   LOC  = W24;
+NET "led_low[3]"   LOC  = V24;
+NET "led_low[4]"   LOC  = H24;
+NET "led_low[5]"   LOC  = H25;
+NET "led_low[6]"   LOC  = P24;
+NET "led_low[7]"   LOC  = R24;
+NET "rst_qpll"     LOC  = U30;
+NET "qpll_lock"    LOC  = M22;
+NET "tmb_clock0"    LOC  = B31; # LHC_Clk  io_600
+# NET "tmb_clock1"  LOC  = K24; # GCLK1_6P
+NET "fcs"          LOC  = Y24; # drive FCS HIGH for compatibility with Mezz 2012.
+
+NET "pb" LOC = V29;
+NET "pb" CLOCK_DEDICATED_ROUTE = FALSE;
+NET "sw[7]" LOC = U25;
+NET "sw[7]" CLOCK_DEDICATED_ROUTE = FALSE;
+NET "sw[8]" LOC = U26;
+NET "sw[8]" CLOCK_DEDICATED_ROUTE = FALSE;
+
+NET "test_led[9]" LOC = T25;
+NET "test_led[10]" LOC = U27;
+# should try LV_DCI standard sometime...
+
+NET "ck125n" LOC = H9 | IOSTANDARD = "LVDS_25";  // 2.5V IO is Xilinx-V6 default anyway
+NET "ck125p" LOC = J9 | IOSTANDARD = "LVDS_25";
+NET "ck125" TNM_NET = "clock125";
+TIMESPEC "TS_clock125" = PERIOD "clock125" 8 ns HIGH 50%;
+# NET "ck125p" period=8ns high 50%;
+
+NET "ck160n" LOC = AB5 | IOSTANDARD = "LVDS_25";
+NET "ck160p" LOC = AB6 | IOSTANDARD = "LVDS_25";
+# NET "ck160" TNM_NET = "clock160";
+NET "snap_clk2" TNM_NET = "clock160";
+TIMESPEC "TS_clock160" = PERIOD "clock160" 6.25 ns HIGH 50%;
+
+#NET "clust_clock" TNM_NET = "clust_clock";
+#TIMESPEC "TS_clust_clock" = PERIOD "clock160" 6.25 ns HIGH 50%;
+
+#NET "ck160" TNM_NET = "ck160";
+#TIMESPEC "TS_ck160" = PERIOD "ck160" 6.25 ns HIGH 50%;
+
+NET "lhc_ckn" LOC = B10 | IOSTANDARD = "LVDS_25";  # this is differential 40 MHz from QPLL
+NET "lhc_ckp" LOC = A10 | IOSTANDARD = "LVDS_25";
+NET "qpll_ck40" TNM_NET = "qpllck40";
+TIMESPEC "TS_qpllck40" = PERIOD "qpllck40" 25 ns HIGH 50%;
+
+#NET "lhc_ck" TNM_NET = "lhc_ck";  # this is from tmb_clock0
+#TIMESPEC "TS_lhc_clock" = PERIOD "lhc_clock" 25 ns HIGH 50%;
+
+# location for snap fiber0 mgt: GTX3/?
+NET "txn[0]" LOC = AK2 | IOSTANDARD = "LVDS_25";
+NET "txp[0]" LOC = AK1 | IOSTANDARD = "LVDS_25";
+#NET "rxn[0]" LOC = AP6 | IOSTANDARD = "LVDS_25";
+#NET "rxp[0]" LOC = AP5 | IOSTANDARD = "LVDS_25";
+
+# location for snap fiber1 mgt: gtx4/rx1
+NET "txn[1]" LOC = AH2 | IOSTANDARD = "LVDS_25";
+NET "txp[1]" LOC = AH1 | IOSTANDARD = "LVDS_25";
+#NET "rxn[1]" LOC = AM6 | IOSTANDARD = "LVDS_25";
+#NET "rxp[1]" LOC = AM5 | IOSTANDARD = "LVDS_25";
+
+# location for snap fiber2 mgt: gtx7/rx2
+NET "txn[2]" LOC = AB2 | IOSTANDARD = "LVDS_25";
+NET "txp[2]" LOC = AB1 | IOSTANDARD = "LVDS_25";
+#NET "rxn[2]" LOC = AL4 | IOSTANDARD = "LVDS_25";
+#NET "rxp[2]" LOC = AL3 | IOSTANDARD = "LVDS_25";
+
+# location for snap fiber3 mgt: gtx8/rx3
+NET "txn[3]" LOC = Y2 | IOSTANDARD = "LVDS_25";
+NET "txp[3]" LOC = Y1 | IOSTANDARD = "LVDS_25";
+#NET "rxn[3]" LOC = AJ4 | IOSTANDARD = "LVDS_25";
+#NET "rxp[3]" LOC = AJ3 | IOSTANDARD = "LVDS_25";
+
+# location for snap fiber4 mgt: gtx9/rx8
+NET "txn[4]" LOC = V2 | IOSTANDARD = "LVDS_25";
+NET "txp[4]" LOC = V1 | IOSTANDARD = "LVDS_25";
+#NET "rxn[4]" LOC = AA4 | IOSTANDARD = "LVDS_25";
+#NET "rxp[4]" LOC = AA3 | IOSTANDARD = "LVDS_25";
+
+# location for snap fiber5 mgt: gtx10/rx9
+NET "txn[5]" LOC = T2 | IOSTANDARD = "LVDS_25";
+NET "txp[5]" LOC = T1 | IOSTANDARD = "LVDS_25";
+#NET "rxn[5]" LOC = W4 | IOSTANDARD = "LVDS_25"; # RX p/n swapped @snap12 end
+#NET "rxp[5]" LOC = W3 | IOSTANDARD = "LVDS_25"; # RX swapped^^^
+
+# location for snap fiber6 mgt: gtx11/rx10
+NET "txn[6]" LOC = P2 | IOSTANDARD = "LVDS_25";
+NET "txp[6]" LOC = P1 | IOSTANDARD = "LVDS_25";
+#NET "rxn[6]" LOC = U4 | IOSTANDARD = "LVDS_25"; # RX p/n swapped @snap12 end
+#NET "rxp[6]" LOC = U3 | IOSTANDARD = "LVDS_25"; # RX swapped^^^
+
+# location for snap fiber7 mgt: gtx2/rx11
+NET "txn[7]" LOC = AM2 | IOSTANDARD = "LVDS_25";
+NET "txp[7]" LOC = AM1 | IOSTANDARD = "LVDS_25";
+#NET "rxn[7]" LOC = R4 | IOSTANDARD = "LVDS_25";
+#NET "rxp[7]" LOC = R3 | IOSTANDARD = "LVDS_25";
+
+# snap Tx/Rx control lines
+NET "t12_rst"   LOC = AC24;
+NET "t12_sclk"  LOC = V27;
+NET "t12_fault" LOC = P32;
+#NET "t12_sda"   LOC = A31;
+NET "r12_sclk"  LOC = W26;
+NET "r12_fok"   LOC = M30;
+#NET "r12_sda"   LOC = H29;
+
+
+# OLD 3.3V initial testing inputs (temporary) for "test_in[13:0]" on Mezz #1
+#NET "prom_d3" LOC = D15;    # io279
+#NET "prom_d7" LOC = D17;    # io275
+#NET "jtag_fpga3" LOC = K16; # io263
+#NET "sda0" LOC = K21;       # io302
+#NET "tmb_sn" LOC = F20;     # io274
+#NET "t_crit" LOC = M16;    # io267
+
+
+#jg add the following lines 03/02/2015
+NET "f_sclk"     LOC = W27;
+NET "gbe_fok"    LOC = K23;
+NET "ck_gben" LOC = P5 | IOSTANDARD = "LVDS_25";
+NET "ck_gbep" LOC = P6 | IOSTANDARD = "LVDS_25";
+NET "ckgbe" TNM_NET = "clock_gbe";
+TIMESPEC "TS_clock_gbe" = PERIOD "clock_gbe" 8 ns HIGH 50%;
+
+# location for gbe mgt: gtx19
+NET "gbe_txn" LOC = A4 | IOSTANDARD = "LVDS_25";
+NET "gbe_txp" LOC = A3 | IOSTANDARD = "LVDS_25";
+NET "gbe_rxn" LOC = B6 | IOSTANDARD = "LVDS_25";
+NET "gbe_rxp" LOC = B5 | IOSTANDARD = "LVDS_25";

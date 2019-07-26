@@ -9,6 +9,7 @@ module   gem_fiber_out #(parameter SIM_SPEEDUP = 0) (
 
   input [55:0]  GEM_DATA,      // 56 bit GEM data
   input         GEM_OVERFLOW,  //  1 bit GEM has more than 8 clusters
+        output  [7:0] GEM_FRAME, // GME frame
 
 	input         TRG_TX_REFCLK, // 160 MHz Reference Clock from QPLL
 	input         TRG_TXUSRCLK,  // 160 MHz (derived from TXOUTCLK)
@@ -194,6 +195,7 @@ assign tx_dly_align_mon_ena = 1'b0;
   end
 
   assign frm_sep = (GEM_OVERFLOW) ? 8'hFC : frame_sep; 
+  assign GEM_FRAME = (GEM_OVERFLOW) ? 8'hFC : frame_sep; 
 
 
 //----------------------------------------------------------------------------------------------------------------------
