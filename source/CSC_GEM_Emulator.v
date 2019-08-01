@@ -448,6 +448,7 @@ module CSC_GEM_Emulator (
     // reset if last command is rewind or write
     wire last_cmd_is_rewind = {cmd_code_r,cmd_code_rr}==CMD_REWIND;
     wire last_cmd_is_write  = {cmd_code_r,cmd_code_rr}==CMD_WRITE;
+    wire last_cmd_is_dump   = {cmd_code_r,cmd_code_rr}==CMD_DUMP;
 
     wire ibx_reset = (gtx_reset || last_cmd_is_rewind || last_cmd_is_write);
 
@@ -1290,7 +1291,7 @@ module CSC_GEM_Emulator (
 	wire usrclk2    = tx_clk;
 
         reg [3:0] overflow_cnt = 0; 
-        always @(posedge tx_clk) // 
+        always @(posedge dump_done) // 
         begin
             if (reset) begin
                 overflow_cnt <= 4'b0;
@@ -1298,8 +1299,8 @@ module CSC_GEM_Emulator (
             end
             else begin 
                 //force one overflow error in GEM fiber3 every 16 DUMPs
-                overflow_cnt <= (overflow_cnt == 4'b1111 && send_event) ? 4'b0 : ((send_event) ? overflow_cnt + 4'b1 : overflow_cnt);
-                gem_overflow_reg[3] <= (overflow_cnt == 4'b1111 && send_event) ? 1'b1 : 1'b0;
+                overflow_cnt <= (overflow_cnt == 4'b1111 ) ? 4'b0 : overflow_cnt + 4'b1;
+                gem_overflow_reg[3] <= (overflow_cnt == 4'b1111 ) ? 1'b1 : 1'b0;
             end
         end
 
