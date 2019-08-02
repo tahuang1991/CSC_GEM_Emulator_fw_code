@@ -1304,6 +1304,133 @@ module CSC_GEM_Emulator (
             end
         end
 
+      parameter MXGEM             = 4;
+      parameter MXCLUSTER_CHAMBER = 8;
+      parameter CLSTBITS          = 14;
+      wire [13:0] gem_cluster0 [MXGEM-1:0]; // cluster0 in GEM coordinates (0-1535)
+      wire [13:0] gem_cluster1 [MXGEM-1:0]; // cluster1 in GEM coordinates (0-1535)
+      wire [13:0] gem_cluster2 [MXGEM-1:0]; // cluster2 in GEM coordinates (0-1535)
+      wire [13:0] gem_cluster3 [MXGEM-1:0]; // cluster3 in GEM coordinates (0-1535)
+
+      //wire [ 4:0] gem_cluster0_feb  [MXGEM-1:0]; // VFAT number 
+      //wire [ 4:0] gem_cluster1_feb  [MXGEM-1:0]; // VFAT number 
+      //wire [ 4:0] gem_cluster2_feb  [MXGEM-1:0]; // VFAT number 
+      //wire [ 4:0] gem_cluster3_feb  [MXGEM-1:0]; // VFAT number 
+
+      //wire [ 2:0] gem_cluster0_roll [MXGEM-1:0]; // roll  number
+      //wire [ 2:0] gem_cluster1_roll [MXGEM-1:0]; // roll  number
+      //wire [ 2:0] gem_cluster2_roll [MXGEM-1:0]; // roll  number
+      //wire [ 2:0] gem_cluster3_roll [MXGEM-1:0]; // roll  number
+
+      //wire [ 7:0] gem_cluster0_pad  [MXGEM-1:0]; // pad number in one roll,0-191
+      //wire [ 7:0] gem_cluster1_pad  [MXGEM-1:0]; // pad number in one roll,0-191
+      //wire [ 7:0] gem_cluster2_pad  [MXGEM-1:0]; // pad number in one roll,0-191
+      //wire [ 7:0] gem_cluster3_pad  [MXGEM-1:0]; // pad number in one roll,0-191
+
+      wire  [0:0]   gem_vpf0 [MXGEM-1:0]; // cluster0 valid flag
+      wire  [0:0]   gem_vpf1 [MXGEM-1:0]; // cluster1 valid flag
+      wire  [0:0]   gem_vpf2 [MXGEM-1:0]; // cluster2 valid flag
+      wire  [0:0]   gem_vpf3 [MXGEM-1:0]; // cluster3 valid flag
+      wire [23:0]   gem_active_feb_list[MXGEM-1:0];
+      wire [23:0]   gemA_active_feb_list;
+      wire [23:0]   gemB_active_feb_list;
+      wire [23:0]   copad_active_feb_list = gemA_active_feb_list & gemB_active_feb_list;
+
+
+      // join fibers together into the two GEM chambers
+      wire [CLSTBITS-1:0] gemA_cluster [MXCLUSTER_CHAMBER-1:0] = {
+        gem_cluster3[1],
+        gem_cluster2[1],
+        gem_cluster1[1],
+        gem_cluster0[1],
+        gem_cluster3[0],
+        gem_cluster2[0],
+        gem_cluster1[0],
+        gem_cluster0[0]
+      };
+
+      wire [CLSTBITS-1:0] gemB_cluster [MXCLUSTER_CHAMBER-1:0] = {
+        gem_cluster3[3],
+        gem_cluster2[3],
+        gem_cluster1[3],
+        gem_cluster0[3],
+        gem_cluster3[2],
+        gem_cluster2[2],
+        gem_cluster1[2],
+        gem_cluster0[2]
+      };
+
+
+      //wire [2:0] gemA_cluster_roll [MXCLUSTER_CHAMBER-1:0] = {
+      //  gem_cluster3_roll[1],
+      //  gem_cluster2_roll[1],
+      //  gem_cluster1_roll[1],
+      //  gem_cluster0_roll[1],
+      //  gem_cluster3_roll[0],
+      //  gem_cluster2_roll[0],
+      //  gem_cluster1_roll[0],
+      //  gem_cluster0_roll[0]
+      //};
+
+      //wire [2:0] gemB_cluster_roll [MXCLUSTER_CHAMBER-1:0] = {
+      //  gem_cluster3_roll[3],
+      //  gem_cluster2_roll[3],
+      //  gem_cluster1_roll[3],
+      //  gem_cluster0_roll[3],
+      //  gem_cluster3_roll[2],
+      //  gem_cluster2_roll[2],
+      //  gem_cluster1_roll[2],
+      //  gem_cluster0_roll[2]
+      //};
+
+      //wire [7:0] gemA_cluster_pad [MXCLUSTER_CHAMBER-1:0] = {
+      //  gem_cluster3_pad[1],
+      //  gem_cluster2_pad[1],
+      //  gem_cluster1_pad[1],
+      //  gem_cluster0_pad[1],
+      //  gem_cluster3_pad[0],
+      //  gem_cluster2_pad[0],
+      //  gem_cluster1_pad[0],
+      //  gem_cluster0_pad[0]
+      //};
+
+      //wire [7:0] gemB_cluster_pad [MXCLUSTER_CHAMBER-1:0] = {
+      //  gem_cluster3_pad[3],
+      //  gem_cluster2_pad[3],
+      //  gem_cluster1_pad[3],
+      //  gem_cluster0_pad[3],
+      //  gem_cluster3_pad[2],
+      //  gem_cluster2_pad[2],
+      //  gem_cluster1_pad[2],
+      //  gem_cluster0_pad[2]
+      //  };
+
+      wire [MXCLUSTER_CHAMBER-1:0] gemA_vpf = {
+        gem_vpf3[1],
+        gem_vpf2[1],
+        gem_vpf1[1],
+        gem_vpf0[1],
+        gem_vpf3[0],
+        gem_vpf2[0],
+        gem_vpf1[0],
+        gem_vpf0[0]
+      };
+
+      wire [MXCLUSTER_CHAMBER-1:0] gemB_vpf = {
+        gem_vpf3[3],
+        gem_vpf2[3],
+        gem_vpf1[3],
+        gem_vpf0[3],
+        gem_vpf3[2],
+        gem_vpf2[2],
+        gem_vpf1[2],
+        gem_vpf0[2]
+      };
+
+      wire gem_any = (|gemA_vpf) | (|gemB_vpf);
+       
+      assign gemA_active_feb_list = (gem_active_feb_list[0] | gem_active_feb_list[1]);
+      assign gemB_active_feb_list = (gem_active_feb_list[2] | gem_active_feb_list[3]);
 
 
 	genvar igem;
@@ -1338,6 +1465,41 @@ module CSC_GEM_Emulator (
 		.MON_TRG_TX_ISK      (),                        // N/A returns 4 bits
 		.MON_TRG_TX_DATA     ()                         // N/A returns 32 bits
 	);
+
+        gem ugem(
+            .clock         (ck40),     
+            .gemdata       (gem_fiber_out[igem][55:0]),
+            // GEM Cluster Outputs
+            .cluster0 (gem_cluster0[igem]), // Out GEM Cluster
+            .cluster1 (gem_cluster1[igem]), // Out GEM Cluster
+            .cluster2 (gem_cluster2[igem]), // Out GEM Cluster
+            .cluster3 (gem_cluster3[igem]), // Out GEM Cluster
+            //VFAT number
+            //.cluster0_feb (gem_cluster0_feb[igem]),
+            //.cluster1_feb (gem_cluster1_feb[igem]),
+            //.cluster2_feb (gem_cluster2_feb[igem]),
+            //.cluster3_feb (gem_cluster3_feb[igem]),
+
+            //.cluster0_roll (gem_cluster0_roll[igem]),// eta partition number 
+            //.cluster1_roll (gem_cluster1_roll[igem]),
+            //.cluster2_roll (gem_cluster2_roll[igem]),
+            //.cluster3_roll (gem_cluster3_roll[igem]),
+
+            //.cluster0_pad (gem_cluster0_pad[igem]), // pad number in one roll, no VFAT boundary
+            //.cluster1_pad (gem_cluster1_pad[igem]),
+            //.cluster2_pad (gem_cluster2_pad[igem]),
+            //.cluster3_pad (gem_cluster3_pad[igem]),
+
+            // GEM Valid Data Output Flags
+            .vpf0 (gem_vpf0[igem]), // Out GEM valid data
+            .vpf1 (gem_vpf1[igem]), // Out GEM valid data
+            .vpf2 (gem_vpf2[igem]), // Out GEM valid data
+            .vpf3 (gem_vpf3[igem]), // Out GEM valid data
+
+            .active_feb_list(gem_active_feb_list[igem][23:0])
+        );
+
+
 	end
 	endgenerate
 
@@ -1492,7 +1654,7 @@ module CSC_GEM_Emulator (
 x_flashsm #(22) led0 (.trigger(loading_bram),         .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_led));
 x_flashsm #(22) led1 (.trigger(cmd_code==CMD_DUMP),   .hold(1'b0), .clock(gbe_txclk2), .out(dump_led));
 x_flashsm #(22) led2 (.trigger(cmd_code==CMD_WRITE),  .hold(1'b0), .clock(gbe_txclk2), .out(cmd_code_led));
-x_flashsm #(22) led3 (.trigger(gbe_rxdat==CMD_WRITE), .hold(1'b0), .clock(gbe_txclk2), .out(rxdat_led));
+//x_flashsm #(22) led3 (.trigger(gbe_rxdat==CMD_WRITE), .hold(1'b0), .clock(gbe_txclk2), .out(rxdat_led));
 //Tao, replace  led4,5 by gem sychronization
 //x_flashsm #(22) led4 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_adr<MXBRAMS && gbe_rxcount==16'h5), .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_led2));
 //x_flashsm #(22) led5 (.trigger(gbe_rxcount>16'd4 && cmd_code==CMD_WRITE && bk_adr<MXBRAMS && rx_adr==11'h7ff), .hold(1'b0), .clock(gbe_txclk2), .out(loading_bram_done));
@@ -1500,11 +1662,17 @@ x_flashsm #(22) led3 (.trigger(gbe_rxdat==CMD_WRITE), .hold(1'b0), .clock(gbe_tx
    wire gems_sync;
    assign gem_sync[0] = (gem_overflow[0] || gem_overflow[1] ) ? 1'b0 : gem_frame[0] == gem_frame[1];
    assign gem_sync[1] = (gem_overflow[2] || gem_overflow[3] ) ? 1'b0 : gem_frame[2] == gem_frame[3];
-   assign gems_sync = (|gem_overflow) ? 1'b0 : gem_frame[0] == gem_frame[2]; 
-x_flashsm #(22) led4 (.trigger(gem_sync[0]),     .hold(1'b0), .clock(tx_clk), .out(gem_sync0_led));
-x_flashsm #(22) led5 (.trigger(gem_sync[1]),     .hold(1'b0), .clock(tx_clk), .out(gem_sync1_led));
-x_flashsm #(22) led6 (.trigger(gems_sync),       .hold(1'b0), .clock(tx_clk), .out(gems_sync_led));
-x_flashsm #(22) led7 (.trigger(|gem_overflow),   .hold(1'b0), .clock(tx_clk), .out(gems_overflow_led));
+   //assign gems_sync = (|gem_overflow) ? 1'b0 : gem_frame[0] == gem_frame[2]; 
+   assign gems_sync = (|gem_overflow) ? 1'b0 : &gem_sync; 
+   assign test3  = (gem_cluster0 == 14'b0);
+   assign test4  = | copad_active_feb_list;
+   assign test5  = gem_any;
+
+x_flashsm #(22) led3 (.trigger(test3),                       .hold(1'b0), .clock(ck40), .out(test3_led));
+x_flashsm #(22) led4 (.trigger(test4),                       .hold(1'b0), .clock(ck40), .out(test4_led));
+x_flashsm #(22) led5 (.trigger(test5),                       .hold(1'b0), .clock(ck40), .out(test5_led));
+x_flashsm #(22) led6 (.trigger(gems_sync),                   .hold(1'b0), .clock(tx_clk), .out(gems_sync_led));
+x_flashsm #(22) led7 (.trigger(|gem_overflow),               .hold(1'b0), .clock(tx_clk), .out(gems_overflow_led));
 
     wire sump = gbe_sump | fiberout_sump | clk_sump;
 
@@ -1522,13 +1690,16 @@ x_flashsm #(22) led7 (.trigger(|gem_overflow),   .hold(1'b0), .clock(tx_clk), .o
         led_hi[8]  = ~ (1'b0 ^ loading_bram_led  ); //!(hold_bit | gtx_reset) ; // M1: synced with PB & errors at crate Rx
         led_hi[9]  = ~ (1'b0 ^ dump_led          ); // qpll_lock_lost         ; // 0
         led_hi[10] = ~ (1'b0 ^ cmd_code_led      ); //!cmd_code[7]            ; // !gtx_reset                              ; // 0
-        led_hi[11] = ~ (1'b0 ^ rxdat_led         ); //!rd_ptr[8]              ; // ~6.25 usec  // gtx_ready                ; // 1
+        //led_hi[11] = ~ (1'b0 ^ rxdat_led         ); //!rd_ptr[8]              ; // ~6.25 usec  // gtx_ready                ; // 1
+        led_hi[11] = ~ (1'b0 ^ test3_led         ); //!rd_ptr[8]              ; // ~6.25 usec  // gtx_ready                ; // 1
         //led_hi[12] = ~ (1'b0 ^ loading_bram_led2 ); //!dump_enable_rr         ; // 12.5 usec   //
         //led_hi[13] = ~ (1'b0 ^ loading_bram_done ); //!dump_enable_r          ; // 12.5 usec   // (locked & lhc_locked)    ; // 1
         //led_hi[14] = ~ (1'b0 ^ 1'b0              ); //!dump_enable            ; // 12.5 usec
         //led_hi[15] = ~ (1'b0 ^ loading_bram_led  ); //!dump_done              ; // 50ns
-        led_hi[12] = ~ (1'b0 ^ gem_sync0_led);
-        led_hi[13] = ~ (1'b0 ^ gem_sync1_led);
+        //led_hi[12] = ~ (1'b0 ^ gem_sync0_led);
+        //led_hi[13] = ~ (1'b0 ^ gem_sync1_led);
+        led_hi[12] = ~ (1'b0 ^ test4_led);
+        led_hi[13] = ~ (1'b0 ^ test5_led);
         led_hi[14] = ~ (1'b0 ^ gems_sync_led);
         led_hi[15] = ~ (1'b0 ^ gems_overflow_led  ); //!dump_done              ; // 50ns
 
