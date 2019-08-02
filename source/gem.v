@@ -72,11 +72,10 @@ parameter MXFEB    = 24;
   wire [ 2:0] cnt         [3:0];
   wire [ 0:0] vpf         [3:0];
   //add vfat, roll,pad in a roll
-  //reg [ 4:0] cluster_feb [3:0];       
+  reg [ 4:0] cluster_feb [3:0];       
   //reg [ 2:0] cluster_roll[3:0];       
   //reg [ 7:0] cluster_pad [3:0];       
 
-  wire [4:0] cluster_feb [3:0];
 
   //wire [MXPAD-1:0] gemhit_roll0 = 0;
   //wire [MXPAD-1:0] gemhit_roll1 = 0;
@@ -93,7 +92,7 @@ parameter MXFEB    = 24;
   genvar iclst;
   generate
   for (iclst=0; iclst<4; iclst=iclst+1) begin: cluster_assignment
-    assign cluster     [iclst] = gtx_rx_data[(iclst+1)*14-1 : iclst*14];
+    assign cluster     [iclst] = gemdata[(iclst+1)*14-1 : iclst*14];
     assign adr         [iclst] = cluster[iclst][10:0];
     assign cnt         [iclst] = cluster[iclst][13:11];
     assign vpf         [iclst] = ~(adr[iclst][10:9]==2'b11);
