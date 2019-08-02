@@ -98,7 +98,7 @@ parameter MXFEB    = 24;
     assign vpf         [iclst] = ~(adr[iclst][10:9]==2'b11);
     //assign hits_cluster[iclst] = (vpf[iclst] ? {(1536-cnt[iclst]-1-adr[iclst])*{0},(cnt[iclst]+1)*{1}, adr[iclst]*{0}} : 0);
   always @(*) begin
-  case (adr[0][iclst][10:6]) // adr[10:6] is the "natural" vfatid
+  case (adr[iclst][10:6]) // adr[10:6] is the "natural" vfatid
     5'd0:    cluster_feb[iclst] = 5'd0;
     5'd1:    cluster_feb[iclst] = 5'd8;
     5'd2:    cluster_feb[iclst] = 5'd16;
