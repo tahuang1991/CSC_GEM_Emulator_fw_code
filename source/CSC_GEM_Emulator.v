@@ -1308,8 +1308,8 @@ module CSC_GEM_Emulator (
             else begin 
                 //force one overflow error in GEM fiber3 every 16 DUMPs
                 overflow_cnt <= (overflow_cnt == 4'b1111 ) ? 4'b0 : overflow_cnt + 4'b1;
-                //no overflow version
-                //gem_overflow_reg[3] <= (overflow_cnt == 4'b1111 ) ? 1'b1 : 1'b0;
+                //forced overflow version
+                gem_overflow_reg[3] <= (overflow_cnt == 4'b1111 ) ? 1'b1 : 1'b0;
             end
         end
 
