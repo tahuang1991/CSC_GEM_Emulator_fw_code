@@ -489,11 +489,17 @@ module CSC_GEM_Emulator (
 
     reg [55:0] gem_fiber_out [NumGEMFibers-1:0];
     reg [47:0] cfeb_fiber_out[NumCSCFibers:1];
+    wire [55:0] gem_oram [3:0];
+    //reverse bytes in one package
+    assign gem_oram[0] = {data_oram[0][7:0], data_oram[0][15:8], data_oram[0][23:16], data_oram[0][31:24], data_oram[0][39:32], data_oram[0][47:40], data_oram[0][55:48]};
+    assign gem_oram[1] = {data_oram[5][7:0], data_oram[5][15:8], data_oram[5][23:16], data_oram[5][31:24], data_oram[5][39:32], data_oram[5][47:40], data_oram[5][55:48]};
+    assign gem_oram[2] = {data_oram[6][7:0], data_oram[6][15:8], data_oram[6][23:16], data_oram[6][31:24], data_oram[6][39:32], data_oram[6][47:40], data_oram[6][55:48]};
+    assign gem_oram[3] = {data_oram[7][7:0], data_oram[7][15:8], data_oram[7][23:16], data_oram[7][31:24], data_oram[7][39:32], data_oram[7][47:40], data_oram[7][55:48]};
     always @(negedge ck40) begin  // 80 MHz derived from GTX_TxPLL
-         gem_fiber_out[0][55:0] <= (send_event) ? data_oram[0][55:0] : 56'hffffffffffffff;
-         gem_fiber_out[1][55:0] <= (send_event) ? data_oram[5][55:0] : 56'hffffffffffffff;
-         gem_fiber_out[2][55:0] <= (send_event) ? data_oram[6][55:0] : 56'hffffffffffffff;
-         gem_fiber_out[3][55:0] <= (send_event) ? data_oram[7][55:0] : 56'hffffffffffffff;
+         gem_fiber_out[0][55:0] <= (send_event) ? gem_oram[0][55:0] : 56'hffffffffffffff;
+         gem_fiber_out[1][55:0] <= (send_event) ? gem_oram[1][55:0] : 56'hffffffffffffff;
+         gem_fiber_out[2][55:0] <= (send_event) ? gem_oram[2][55:0] : 56'hffffffffffffff;
+         gem_fiber_out[3][55:0] <= (send_event) ? gem_oram[3][55:0] : 56'hffffffffffffff;
 
         cfeb_fiber_out[1][47:0] <= (send_event) ? data_oram[1][47:0] : 48'h000000000000;
         cfeb_fiber_out[2][47:0] <= (send_event) ? data_oram[2][47:0] : 48'h000000000000;
