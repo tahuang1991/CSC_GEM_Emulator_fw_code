@@ -1666,7 +1666,8 @@ x_flashsm #(22) led2 (.trigger(cmd_code==CMD_WRITE),  .hold(1'b0), .clock(gbe_tx
    //assign gems_sync = (|gem_overflow) ? 1'b0 : gem_frame[0] == gem_frame[2]; 
    assign gems_sync = (|gem_overflow) ? 1'b0 : &gem_sync; 
    assign test3  = (gem_cluster0[0] == 14'b0);
-   assign test4  = | copad_active_feb_list;
+   //assign test4  = | copad_active_feb_list;
+   assign test4  = (gem_cluster0[2] == {3'd7, 11'd1535});
    assign test5  = gem_any;
 
 x_flashsm #(22) led3 (.trigger(test3),                       .hold(1'b0), .clock(ck40), .out(test3_led));
