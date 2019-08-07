@@ -490,8 +490,10 @@ module CSC_GEM_Emulator (
     reg [55:0] gem_fiber_out [NumGEMFibers-1:0];
     reg [47:0] cfeb_fiber_out[NumCSCFibers:1];
     wire [55:0] gem_oram [3:0];
-    //reverse bytes in one package
+    //reverse all 7 bytes in one GEM package, now gem_oram = {cluster0, cluster1, cluster2, cluster4}
+    //probably should also reverse the cluster order in gem_oram
     assign gem_oram[0] = {data_oram[0][7:0], data_oram[0][15:8], data_oram[0][23:16], data_oram[0][31:24], data_oram[0][39:32], data_oram[0][47:40], data_oram[0][55:48]};
+
     assign gem_oram[1] = {data_oram[5][7:0], data_oram[5][15:8], data_oram[5][23:16], data_oram[5][31:24], data_oram[5][39:32], data_oram[5][47:40], data_oram[5][55:48]};
     assign gem_oram[2] = {data_oram[6][7:0], data_oram[6][15:8], data_oram[6][23:16], data_oram[6][31:24], data_oram[6][39:32], data_oram[6][47:40], data_oram[6][55:48]};
     assign gem_oram[3] = {data_oram[7][7:0], data_oram[7][15:8], data_oram[7][23:16], data_oram[7][31:24], data_oram[7][39:32], data_oram[7][47:40], data_oram[7][55:48]};
@@ -1671,9 +1673,9 @@ x_flashsm #(22) led2 (.trigger(cmd_code==CMD_WRITE),  .hold(1'b0), .clock(gbe_tx
    assign gem_sync[1] = (gem_overflow[2] || gem_overflow[3] ) ? 1'b0 : gem_frame[2] == gem_frame[3];
    //assign gems_sync = (|gem_overflow) ? 1'b0 : gem_frame[0] == gem_frame[2]; 
    assign gems_sync = (|gem_overflow) ? 1'b0 : &gem_sync; 
-   assign test3  = (gem_cluster0[0] == 14'b0);
+   assign test3  = (gem_cluster3[0] == 14'b0);
    //assign test4  = | copad_active_feb_list;
-   assign test4  = (gem_cluster0[2] == {3'd7, 11'd1535});
+   assign test4  = (gem_cluster3[2] == {3'd7, 11'd1535});
    assign test5  = gem_any;
 
 x_flashsm #(22) led3 (.trigger(test3),                       .hold(1'b0), .clock(ck40), .out(test3_led));
