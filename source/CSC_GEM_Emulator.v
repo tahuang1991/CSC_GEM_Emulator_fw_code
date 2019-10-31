@@ -1298,8 +1298,18 @@ module CSC_GEM_Emulator (
 	assign txp[11]= gem_tx_p[3] ;// fiber 8
 	assign txn[11]= gem_tx_n[3] ;
 
-	wire [3:0] gem_tx_out_clk;
-	wire [3:0] gem_tx_pll_locked;
+	wire [NumGEMFibers-1:0] gem_tx_out_clk;
+	wire [NumGEMFibers-1:0] gem_tx_pll_locked;
+
+        wire [NumCSCFibers-1:0] csc_tx_out_clk;
+        wire [NumCSCFibers-1:0] csc_tx_pll_locked;
+        
+        wire [NumCSCFibers-1:0] csc_synced_snapt;
+
+        assign tx_clk_out   = csc_tx_out_clk[0];
+        assign ck160_locked = csc_tx_pll_locked[0];
+        assign synced_snapt = csc_synced_snapt[0];
+
 
         wire [7:0] gem_frame [NumGEMFibers-1:0];
 
@@ -1552,10 +1562,10 @@ module CSC_GEM_Emulator (
         .ENA_TEST_PAT        (1'b0),                 // HIGH for PRBS! (Low will send data from GxC registers)  Use This Later, send low-rate pattern.
         .INJ_ERR             ( ferr_f[1] & sw[8]),   // use my switch/PB combo logic for this, high-true? Pulse high once.
         .TRG_SD              ( ),                    // from IBUF, useless output. N/A
-        .TRG_TXOUTCLK        ( tx_clk_out),          // 80 MHz; This has to go to MCM to generate 160/80
-        .TRG_TX_PLL_LOCK     ( ck160_locked),        // inverse holds the MCM in Reset                                                                                                                                                                       // Tx GTX PLL Ref lock
+        .TRG_TXOUTCLK        ( csc_tx_out_clk[icsc]),          // 80 MHz; This has to go to MCM to generate 160/80
+        .TRG_TX_PLL_LOCK     ( csc_tx_pll_locked[icsc]),        // inverse holds the MCM in Reset                                                                                                                                                                       // Tx GTX PLL Ref lock
         .TRG_TXRESETDONE     ( ),                    // N/A
-        .TX_SYNC_DONE        ( synced_snapt),        // not used in DCFEB tests
+        .TX_SYNC_DONE        ( csc_synced_snapt[icsc]),        // not used in DCFEB tests
         .STRT_LTNCY          ( tx_begin[icsc]),         // after every Reset, to TP for debug only  -- !sw7 ?
         .LTNCY_TRIG          ( tx_fc[icsc]),            // bring out to TP.  Signals when TX sends "FC" (once every 128 BX).  Send raw to TP  --sw8,7
         .MON_TX_SEL          ( ),                    // N/A
