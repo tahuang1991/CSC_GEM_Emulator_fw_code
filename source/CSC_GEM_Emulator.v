@@ -1284,7 +1284,26 @@ module CSC_GEM_Emulator (
         wire [NumCSCFibers-1:0] csc_tx_p;
         wire [NumCSCFibers-1:0] csc_tx_n;
 
+        assign txn[1] = csc_tx_n[0];
+        assign txp[1] = csc_tx_p[0];
 
+        assign txn[2] = csc_tx_n[1];
+        assign txp[2] = csc_tx_p[1];
+
+        assign txn[3] = csc_tx_n[2];
+        assign txp[3] = csc_tx_p[2];
+
+        assign txn[4] = csc_tx_n[3];
+        assign txp[4] = csc_tx_p[3];
+
+        assign txn[5] = csc_tx_n[4];
+        assign txp[5] = csc_tx_p[4];
+
+        assign txn[6] = csc_tx_n[5];
+        assign txp[6] = csc_tx_p[5];
+
+        assign txn[7] = csc_tx_n[6];
+        assign txp[7] = csc_tx_p[6];
 
 	assign txp[8]= gem_tx_p[0] ; //fiber 5
 	assign txn[8]= gem_tx_n[0] ;
@@ -1544,8 +1563,8 @@ module CSC_GEM_Emulator (
         .TRG_RX_N            ( ),                    // empty
         .TRG_RX_P            ( ),                    // empty
         .TRG_TDIS            ( ),                    // OBUF output, for what?  N/A?
-        .TRG_TX_N            ( txn[icsc]),              // pick a fiber
-        .TRG_TX_P            ( txp[icsc]),              // pick a fiber
+        .TRG_TX_N            ( csc_tx_n[icsc]),              // pick a fiber
+        .TRG_TX_P            ( csc_tx_p[icsc]),              // pick a fiber
         .G1C                 ( cfeb_fiber_out[icsc][7:0]),   // Comp data for TX to TMB...use to send a low-rate pattern on !sw8 & sw7 & !PB
         .G2C                 ( cfeb_fiber_out[icsc][15:8]),  // if ENA_TEST_PAT then it's prbs so these don't matter...
         .G3C                 ( cfeb_fiber_out[icsc][23:16]), // but good for testing low-rate non-zero triad data:
