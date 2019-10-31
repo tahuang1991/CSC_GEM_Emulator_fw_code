@@ -1284,8 +1284,8 @@ module CSC_GEM_Emulator (
         wire [NumCSCFibers-1:0] csc_tx_p;
         wire [NumCSCFibers-1:0] csc_tx_n;
 
-        assign txn[0]  = 1'b0;//dump assignment, avoid compiling error
-        assign txp[0]  = 1'b1;
+        assign txn[0] = csc_tx_n[0];//dump assignment, avoid compiling error
+        assign txp[0] = csc_tx_p[0];
 
         assign txn[1] = csc_tx_n[0];
         assign txp[1] = csc_tx_p[0];
