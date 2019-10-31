@@ -495,7 +495,7 @@ module CSC_GEM_Emulator (
     wire [55:0] gem_data_mux = sw[8] ? 56'hfeedadeadabeef : 56'h00000000000000;
 
     reg [55:0] gem_fiber_out [NumGEMFibers-1:0];
-    reg [47:0] cfeb_fiber_out[NumCSCFibers:1];
+    reg [47:0] cfeb_fiber_out[NumCSCFibers-1:0];
     wire [55:0] gem_oram [3:0];
     //reverse all 7 bytes in one GEM package, now gem_oram = {cluster0, cluster1, cluster2, cluster4}
     //probably should also reverse the cluster order in gem_oram
@@ -509,13 +509,13 @@ module CSC_GEM_Emulator (
          gem_fiber_out[2][55:0] <= (send_event) ? gem_oram[2][55:0] : 56'hffffffffffffff;
          gem_fiber_out[3][55:0] <= (send_event) ? gem_oram[3][55:0] : 56'hffffffffffffff;
 
-        cfeb_fiber_out[1][47:0] <= (send_event) ? data_oram[1][47:0] : 48'h000000000000;
-        cfeb_fiber_out[2][47:0] <= (send_event) ? data_oram[2][47:0] : 48'h000000000000;
-        cfeb_fiber_out[3][47:0] <= (send_event) ? data_oram[3][47:0] : 48'h000000000000;
-        cfeb_fiber_out[4][47:0] <= (send_event) ? data_oram[8][47:0] : 48'h000000000000;
-        cfeb_fiber_out[5][47:0] <= (send_event) ? data_oram[9][47:0] : 48'h000000000000;
-        cfeb_fiber_out[6][47:0] <= (send_event) ? data_oram[10][47:0] : 48'h000000000000;
-        cfeb_fiber_out[7][47:0] <= (send_event) ? data_oram[11][47:0] : 48'h000000000000;
+        cfeb_fiber_out[0][47:0] <= (send_event) ? data_oram[1][47:0] : 48'h000000000000;
+        cfeb_fiber_out[1][47:0] <= (send_event) ? data_oram[2][47:0] : 48'h000000000000;
+        cfeb_fiber_out[2][47:0] <= (send_event) ? data_oram[3][47:0] : 48'h000000000000;
+        cfeb_fiber_out[3][47:0] <= (send_event) ? data_oram[8][47:0] : 48'h000000000000;
+        cfeb_fiber_out[4][47:0] <= (send_event) ? data_oram[9][47:0] : 48'h000000000000;
+        cfeb_fiber_out[5][47:0] <= (send_event) ? data_oram[10][47:0] : 48'h000000000000;
+        cfeb_fiber_out[6][47:0] <= (send_event) ? data_oram[11][47:0] : 48'h000000000000;
     end // always
 
 //----------------------------------------------------------------------------------------------------------------------
