@@ -111,7 +111,7 @@ module CSC_GEM_Emulator (
     input 	          t12_fault,
     input             r12_fok,
   //input  [7:1]      rxp,rxn,
-    output [7:0]      txp,txn,
+    output [11:0]      txp,txn,
     output 	          t12_rst,
     output            t12_sclk,
     output            r12_sclk
