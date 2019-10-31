@@ -162,6 +162,10 @@ NET "ck160p" LOC = AB6 | IOSTANDARD = "LVDS_25";
 NET "snap_clk2" TNM_NET = "clock160";
 TIMESPEC "TS_clock160" = PERIOD "clock160" 6.25 ns HIGH 50%;
 
+NET "cp160n" LOC = F5 | IOSTANDARD = "LVDS_25";
+NET "cp160p" LOC = F6 | IOSTANDARD = "LVDS_25";
+
+
 NET "lhc_ckn" LOC = B10 | IOSTANDARD = "LVDS_25";  # this is differential 40 MHz from QPLL
 NET "lhc_ckp" LOC = A10 | IOSTANDARD = "LVDS_25";
 NET "qpll_ck40" TNM_NET = "qpllck40";
@@ -217,6 +221,55 @@ NET "txn[7]" LOC = AM2 | IOSTANDARD = "LVDS_25";
 NET "txp[7]" LOC = AM1 | IOSTANDARD = "LVDS_25";
 #NET "rxn[7]" LOC = R4 | IOSTANDARD = "LVDS_25";
 #NET "rxp[7]" LOC = R3 | IOSTANDARD = "LVDS_25";
+
+## firefly with 12 TX and 4+4 bidirection
+# Snap & FireFly fiber5 mgt: gtx?/rx8 fixed
+NET "txp[8]"		LOC = AN3 | IOSTANDARD = "LVDS_25";	# MGTTXP1_112
+NET "txn[8]"		LOC = AN4 | IOSTANDARD = "LVDS_25";	# MGTTXN1_112
+# Snap & FireFly fiber5, gemRX0/rx4   --GEM0 for OTMB--
+NET "gemrxp[0]"	LOC = AG3  | IOSTANDARD = "LVDS_25";	# MTP fiber 5 on GTX4
+NET "gemrxn[0]"	LOC = AG4  | IOSTANDARD = "LVDS_25";	# MGT Quad 113
+
+# Snap & FireFly fiber6 mgt: gtx?/rx9 fixed
+NET "txp[9]"		LOC = AP1 | IOSTANDARD = "LVDS_25";	# MGTTXP2_112
+NET "txn[9]"		LOC = AP2 | IOSTANDARD = "LVDS_25";	# MGTTXN2_112
+# Snap & FireFly fiber6, gemRX1/rx5   --GEM1 for OTMB--
+NET "gemrxp[1]"	LOC = AF5  | IOSTANDARD = "LVDS_25";	# MTP fiber 6 on GTX5
+NET "gemrxn[1]"	LOC = AF6  | IOSTANDARD = "LVDS_25";	# MGT Quad 113
+
+# Snap & FireFly fiber7 mgt: gtx?/rx10 fixed
+NET "txp[10]"		LOC = AD1 | IOSTANDARD = "LVDS_25";	# MGTTXP3_113
+NET "txn[10]"		LOC = AD2 | IOSTANDARD = "LVDS_25";	# MGTTXN3_113
+# Snap & FireFly fiber7, gemRX2/rx6   --GEM2 for OTMB--
+NET "gemrxp[2]"	LOC = AE3  | IOSTANDARD = "LVDS_25";	# MTP fiber 7 on GTX6
+NET "gemrxn[2]"	LOC = AE4  | IOSTANDARD = "LVDS_25";	# MGT Quad 113
+
+# Snap & FireFly fiber8 mgt: gtx?/rx11 fixed
+NET "txp[11]"		LOC = AF1 | IOSTANDARD = "LVDS_25";	# MGTTXP2_113
+NET "txn[11]"		LOC = AF2 | IOSTANDARD = "LVDS_25";	# MGTTXN2_113
+# Snap & FireFly fiber8, gemRX3/rx7   --GEM3 for OTMB--
+NET "gemrxp[3]"	LOC = AC3  | IOSTANDARD = "LVDS_25";	# MTP fiber 8 on GTX7
+NET "gemrxn[3]"	LOC = AC4  | IOSTANDARD = "LVDS_25";	# MGT Quad 113
+
+# location for BiDir Firefly fiber11/2 mgt: gtx12 quad 116 pos 3
+NET "txn[12]" LOC = A4 | IOSTANDARD = "LVDS_25";#  "fiber 11"
+NET "txp[12]" LOC = A3 | IOSTANDARD = "LVDS_25";
+NET "birxn[0]" LOC = B6 | IOSTANDARD = "LVDS_25";#  "fiber 2"
+NET "birxp[0]" LOC = B5 | IOSTANDARD = "LVDS_25";
+
+# location for BiDir Firefly fiber10/3 mgt: gtx13 quad 116 pos 1
+NET "txn[13]" LOC = C4 | IOSTANDARD = "LVDS_25";#  "fiber 10"
+NET "txp[13]" LOC = C3 | IOSTANDARD = "LVDS_25";
+NET "birxn[1]" LOC = E4 | IOSTANDARD = "LVDS_25";#  "fiber 3"
+NET "birxp[1]" LOC = E3 | IOSTANDARD = "LVDS_25";
+
+# location for BiDir Firefly fiber9/4 mgt: gtx14 quad 115 pos 3
+NET "txn[14]" LOC = F2 | IOSTANDARD = "LVDS_25";#  "fiber 9"
+NET "txp[14]" LOC = F1 | IOSTANDARD = "LVDS_25";
+NET "birxn[2]" LOC = J4 | IOSTANDARD = "LVDS_25";#  "fiber 4"
+NET "birxp[2]" LOC = J3 | IOSTANDARD = "LVDS_25";
+
+
 
 # snap Tx/Rx control lines
 NET "t12_rst"   LOC = AC24;
