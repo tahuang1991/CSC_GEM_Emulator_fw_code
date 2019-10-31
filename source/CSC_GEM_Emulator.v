@@ -110,8 +110,8 @@ module CSC_GEM_Emulator (
 // Snap-12 Tranceivers
     input 	          t12_fault,
     input             r12_fok,
-  //input  [7:1]      rxp,rxn,
-    output [11:1]      txp,txn,
+  //input  [7:1]      rxp,rxn,  
+    output [11:0]      txp,txn,
     output 	          t12_rst,
     output            t12_sclk,
     output            r12_sclk
@@ -1283,6 +1283,9 @@ module CSC_GEM_Emulator (
 
         wire [NumCSCFibers-1:0] csc_tx_p;
         wire [NumCSCFibers-1:0] csc_tx_n;
+
+        assign txn[0]  = 1'b0;//dump assignment, avoid compiling error
+        assign txp[0]  = 1'b1;
 
         assign txn[1] = csc_tx_n[0];
         assign txp[1] = csc_tx_p[0];
