@@ -1332,6 +1332,8 @@ module CSC_GEM_Emulator (
         assign ck160_locked = csc_tx_pll_locked[0];
         assign synced_snapt = csc_synced_snapt[0];
 
+        wire   ck160_gem_locked = gem_tx_pll_locked[0];
+
 
         wire [7:0] gem_frame [NumGEMFibers-1:0];
 
@@ -1617,9 +1619,11 @@ x_flashsm #(22) led2 (.trigger(cmd_code==CMD_WRITE),  .hold(1'b0), .clock(gbe_tx
    assign gem_sync[1] = (gem_overflow[2] || gem_overflow[3] ) ? 1'b0 : gem_frame[2] == gem_frame[3];
    //assign gems_sync = (|gem_overflow) ? 1'b0 : gem_frame[0] == gem_frame[2]; 
    assign gems_sync = (|gem_overflow) ? 1'b0 : &gem_sync; 
-   assign test3  = (gem_cluster3[0] == 14'b0);
+   //assign test3  = (gem_cluster3[0] == 14'b0);
+   assign test3 = ck160_locked;
+   assign test4 = ck160_gem_locked;
    //assign test4  = | copad_active_feb_list;
-   assign test4  = (gem_cluster3[2] == {3'd7, 11'd1535});
+   //assign test4  = (gem_cluster3[2] == {3'd7, 11'd1535});
    assign test5  = gem_any;
 
 x_flashsm #(22) led3 (.trigger(test3),                       .hold(1'b0), .clock(ck40), .out(test3_led));
